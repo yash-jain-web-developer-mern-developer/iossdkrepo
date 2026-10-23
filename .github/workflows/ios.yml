@@ -25,7 +25,7 @@ jobs:
       - name: SDK smoke test against a live server (macOS)
         run: |
           annotate() { echo "::error title=$1::$(tail -n 40 "$2" 2>/dev/null | awk '{printf "%s%%0A", $0}')"; }
-          node scripts/sdk-smoke-server.mjs 8190 > server.log 2>&1 &
+          SMOKE_HOST=127.0.0.1 node scripts/sdk-smoke-server.mjs 8190 > server.log 2>&1 &
           for _ in $(seq 1 40); do grep -q READY server.log && break; sleep 1; done
           line=$(grep READY server.log | sed 's/host.docker.internal/127.0.0.1/')
           url=$(echo "$line" | awk '{print $2}'); app=$(echo "$line" | awk '{print $3}')
