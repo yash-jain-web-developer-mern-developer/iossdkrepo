@@ -7,8 +7,15 @@ import MobiAd
 // and only offers the reward after the player reaches the end of the file. Everything the SDK does is listed in the activity log.
 // Same behaviour as the Android demo app. Server and App ID come from the fields below (the iOS simulator reaches the host as localhost).
 @MainActor final class Game: ObservableObject {
-    @Published var server = "http://localhost:8080", appId = "", level = 1, coins = 120, log: [String] = []
-    @Published var banner: Ad?, native: Ad?, interstitial: Ad?, rewarded: Ad?
+    @Published var server = "http://localhost:8080"
+    @Published var appId = ""
+    @Published var level = 1
+    @Published var coins = 120
+    @Published var log: [String] = []
+    @Published var banner: Ad?
+    @Published var native: Ad?
+    @Published var interstitial: Ad?
+    @Published var rewarded: Ad?
     @Published var testMode = false
     private var plays = 0
     private var sdk: MobiAd?
@@ -94,7 +101,9 @@ struct ViewabilityProbe: UIViewRepresentable {
 // Rewarded video: a real AVPlayer; the reward button only appears after the player reports the end of the file.
 struct RewardedView: View {
     let ad: Ad; let game: Game
-    @State private var player: AVPlayer?, finished = false, failed = false
+    @State private var player: AVPlayer?
+    @State private var finished = false
+    @State private var failed = false
     var body: some View {
         VStack(spacing: 14) {
             Text("REWARDED VIDEO").font(.caption.bold()).padding(6).background(Color.blue).cornerRadius(8)
