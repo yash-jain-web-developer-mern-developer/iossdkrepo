@@ -1,8 +1,9 @@
 name: ios
 # Builds the Swift SDK and the SwiftUI demo app on a Mac runner and runs the SDK against a live MobiAd server.
 # This is the only place iOS code is compiled with UIKit/SwiftUI; local Linux checks cover the SDK's networking logic only.
+# On failure each step publishes the tail of its log as a workflow annotation (readable without logging in to GitHub).
 on:
-  push: { branches: [main], paths: ["sdk/ios/**", "ios-demo-app/**", ".github/workflows/ios.yml"] }
+  push: { branches: [main], paths: ["sdk/ios/**", "ios-demo-app/**", ".github/workflows/ios.yml", "scripts/sdk-smoke-server.mjs"] }
   pull_request: { paths: ["sdk/ios/**", "ios-demo-app/**", ".github/workflows/ios.yml"] }
   workflow_dispatch:
 permissions:
@@ -17,17 +18,26 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: Build the SDK package for iOS (UIKit viewability tracker included)
-        run: xcodebuild build -scheme MobiAd -destination 'generic/platform=iOS Simulator'
         working-directory: sdk/ios
+        run: |
+          set -o pipefail
+          xcodebuild build -scheme MobiAd -destination 'generic/platform=iOS Simulator' 2>&1 | tee ../../sdk-build.log | tail -5
       - name: SDK smoke test against a live server (macOS)
         run: |
+          annotate() { echo "::error title=$1::$(tail -n 40 "$2" 2>/dev/null | awk '{printf "%s%%0A", $0}')"; }
           node scripts/sdk-smoke-server.mjs 8190 > server.log 2>&1 &
-          for _ in $(seq 1 30); do grep -q READY server.log && break; sleep 1; done
-          read -r _ url app < <(grep READY server.log | sed 's/host.docker.internal/127.0.0.1/')
-          swiftc -parse-as-library sdk/ios/Sources/MobiAd/MobiAd.swift sdk/ios/Tests/smoke.swift -o smoke
-          ./smoke "$url" "$app"
+          for _ in $(seq 1 40); do grep -q READY server.log && break; sleep 1; done
+          line=$(grep READY server.log | sed 's/host.docker.internal/127.0.0.1/')
+          url=$(echo "$line" | awk '{print $2}'); app=$(echo "$line" | awk '{print $3}')
+          echo "server: $url app: $app"
+          if ! swiftc -parse-as-library sdk/ios/Sources/MobiAd/MobiAd.swift sdk/ios/Tests/smoke.swift -o smoke > swiftc.log 2>&1; then annotate "swiftc failed" swiftc.log; exit 1; fi
+          if ! ./smoke "$url" "$app" > smoke.log 2>&1; then annotate "smoke test failed" smoke.log; annotate "server log" server.log; exit 1; fi
+          tail -n 5 smoke.log
       - name: Build the demo app
         run: |
-          brew install xcodegen
-          cd ios-demo-app && xcodegen
-          xcodebuild build -project MobiAdDemo.xcodeproj -scheme MobiAdDemo -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+          annotate() { echo "::error title=$1::$(tail -n 60 "$2" 2>/dev/null | awk '{printf "%s%%0A", $0}')"; }
+          brew install xcodegen > brew.log 2>&1 || { annotate "brew failed" brew.log; exit 1; }
+          cd ios-demo-app
+          xcodegen > ../xcodegen.log 2>&1 || { annotate "xcodegen failed" ../xcodegen.log; exit 1; }
+          xcodebuild build -project MobiAdDemo.xcodeproj -scheme MobiAdDemo -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO > ../app-build.log 2>&1 || { annotate "demo app build failed" ../app-build.log; exit 1; }
+          tail -n 3 ../app-build.log
