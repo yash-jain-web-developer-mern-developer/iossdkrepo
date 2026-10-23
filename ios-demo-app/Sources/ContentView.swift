@@ -29,8 +29,8 @@ import MobiAd
     }
     func request(_ format: String) async -> Ad? {
         guard let sdk else { return nil }
-        let ad = await sdk.requestAd(format: format, country: "US", language: "en", deviceType: "phone", osVersion: UIDevice.current.systemVersion, connection: "wifi",
-                                     userId: format == "rewarded" ? "player-42" : nil, consent: Consent(gdpr: false), test: testMode)
+        let ad = await sdk.requestAd(format: format, country: "US", consent: Consent(gdpr: false), language: "en", deviceType: "phone", osVersion: UIDevice.current.systemVersion, connection: "wifi",
+                                     userId: format == "rewarded" ? "player-42" : nil, test: testMode)
         note("request \(format) -> " + (ad == nil ? "no fill" : "\"\(ad!.title)\""))
         return ad
     }
