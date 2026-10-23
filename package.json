@@ -1,0 +1,26 @@
+{
+  "name": "mobiad-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "test:integration": "node --test test/integration/real-infra.test.js test/integration/stripe-mock.test.js",
+    "migrate": "node scripts/migrate.js",
+    "loadtest": "node scripts/loadtest.js"
+  },
+  "dependencies": {
+    "ioredis": "^5.11.1",
+    "kafkajs": "^2.2.4",
+    "nodemailer": "^10.1.7",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "ioredis-mock": "^8.13.1",
+    "pg-mem": "^3.0.14"
+  }
+}

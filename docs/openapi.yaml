@@ -1,0 +1,804 @@
+openapi: 3.0.3
+info:
+  title: MobiAd API
+  version: 1.0.0
+  description: |
+    **Ad API** (`/v1/ad`, `/t/*`) is called by app SDKs and is unauthenticated (it is scoped by `appId`).
+    **Control-plane API** (`/api/*`) uses `Authorization: Bearer <JWT>` obtained from `/api/login`.
+    All money amounts in JSON are USD (floats); the ledger stores integer micro-dollars.
+servers:
+  - url: https://ads.example.com
+tags:
+  - { name: Ads, description: SDK-facing ad serving and tracking }
+  - { name: Auth, description: 'Accounts, sessions and MFA' }
+  - { name: Campaigns }
+  - { name: Apps }
+  - { name: Billing }
+  - { name: Admin, description: Requires an admin account (MFA enforced in production) }
+  - { name: Ops }
+security: []
+paths:
+  /v1/ad:
+    post:
+      tags: [Ads]
+      summary: Request an ad
+      description: Runs the auction. Returns 204 when nothing is eligible (no fill).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdRequest' }
+      responses:
+        '200': { description: An ad., content: { application/json: { schema: { $ref: '#/components/schemas/AdResponse' } } } }
+        '204': { description: No fill. }
+        '404': { description: Unknown appId., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: Rate limited per client IP., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/keys:
+    post:
+      tags: [Auth]
+      summary: Create an API key
+      description: Scope `read` (GET only) or `write` (also create campaigns/apps, change campaign status). The full key is returned once. Keys can never fund, pay out, change account security or manage keys. Not available to admins. Max 10 active keys.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string }, scope: { type: string, enum: [read, write] }, expiresInDays: { type: integer, minimum: 0, maximum: 730 } } } } } }
+      responses:
+        '201': { description: Created; includes the key once. }
+        '400': { description: Invalid input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Not allowed (admin or API-key caller)., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Key limit reached., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      tags: [Auth]
+      summary: List API keys (never includes secrets)
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Keys. }
+  /api/keys/revoke:
+    post:
+      tags: [Auth]
+      summary: Revoke an API key
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } } }
+      responses:
+        '200': { description: Revoked. }
+        '404': { description: No such active key., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/team:
+    get:
+      tags: [Auth]
+      summary: List team members and pending invitations (account owner only)
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Members and invites. }
+        '403': { description: Team members cannot call this., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/team/invite:
+    post:
+      tags: [Auth]
+      summary: Invite a colleague (owner only)
+      description: Role `admin` (read plus create/edit campaigns and apps) or `viewer` (read only). Emails a 7-day single-use link. Members can never fund, pay out, or manage the team or API keys. Max 10 members plus pending invites.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email, role], properties: { email: { type: string }, role: { type: string, enum: [admin, viewer] } } } } } }
+      responses:
+        '201': { description: Invited. }
+        '400': { description: Invalid input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Already registered or team full., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/team/accept:
+    post:
+      tags: [Auth]
+      summary: Accept an invitation and create the member login
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token, password], properties: { token: { type: string }, password: { type: string }, acceptTerms: { type: boolean } } } } } }
+      responses:
+        '201': { description: Member created; returns a session token. }
+        '400': { description: Invalid or expired invitation or weak password., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/team/remove:
+    post:
+      tags: [Auth]
+      summary: Remove a member or revoke an invitation (owner only)
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } } }
+      responses:
+        '200': { description: Removed; the member is signed out immediately. }
+        '404': { description: No such member or invitation., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/billing/payout-profile:
+    get:
+      tags: [Billing]
+      summary: Get your payout details and KYC/tax status (publisher)
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Profile with kycStatus and taxStatus (none, submitted, verified, rejected). }
+    post:
+      tags: [Billing]
+      summary: Save payout details (publisher)
+      description: Stores only legal name, country, method (bank, paypal, wise) and an opaque payout reference. Full account numbers are refused. Changing name or country resets verification.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [legalName, country, method, methodRef], properties: { legalName: { type: string }, country: { type: string, minLength: 2, maxLength: 2 }, method: { type: string, enum: [bank, paypal, wise] }, methodRef: { type: string } } } } } }
+      responses:
+        '200': { description: Saved; reverificationRequired tells whether verification was reset. }
+        '400': { description: Invalid input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/billing/payout-profile/submit:
+    post:
+      tags: [Billing]
+      summary: Mark identity (kyc) or tax verification as completed and ready for review
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind], properties: { kind: { type: string, enum: [kyc, tax] } } } } } }
+      responses:
+        '200': { description: Submitted for admin review. }
+        '409': { description: Profile incomplete, or already submitted/verified., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/admin/payouts.csv:
+    get:
+      tags: [Admin]
+      summary: Export payouts for finance (default status approved)
+      security: [{ bearer: [] }]
+      parameters: [{ name: status, in: query, schema: { type: string } }]
+      responses:
+        '200': { description: CSV. Cells are formula-injection safe., content: { text/csv: { schema: { type: string } } } }
+  /api/admin/payout-profiles:
+    get:
+      tags: [Admin]
+      summary: Publisher payout profiles with submitted KYC/tax status (review queue)
+      security: [{ bearer: [] }]
+      parameters: [{ name: status, in: query, schema: { type: string, default: submitted } }]
+      responses:
+        '200': { description: Profiles. }
+  /api/admin/payout-profiles/review:
+    post:
+      tags: [Admin]
+      summary: Verify or reject a submitted KYC or tax status
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [userId, kind, status], properties: { userId: { type: string }, kind: { type: string, enum: [kyc, tax] }, status: { type: string, enum: [verified, rejected] }, note: { type: string, description: Required when rejecting. } } } } } }
+      responses:
+        '200': { description: Reviewed. }
+        '409': { description: Nothing submitted to review., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /v1/test/pixel:
+    get:
+      tags: [Ads]
+      summary: No-op tracking pixel used by test-mode ads
+      responses:
+        '200': { description: 1x1 GIF; nothing is recorded., content: { image/gif: { schema: { type: string, format: binary } } } }
+  /v1/test/click:
+    get:
+      tags: [Ads]
+      summary: Click target used by test-mode ads (redirects to example.com)
+      responses:
+        '302': { description: Redirect. }
+  /sellers.json:
+    get:
+      tags: [Ads]
+      summary: IAB sellers.json (MobiAd as intermediary, publishers as confidential entries)
+      responses:
+        '200': { description: sellers.json document., content: { application/json: { schema: { type: object } } } }
+  /api/ads-txt:
+    get:
+      tags: [Apps]
+      summary: The ads.txt / app-ads.txt line a publisher must add (publisher)
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: lines and text, content: { application/json: { schema: { type: object } } } }
+  /api/campaigns/creative:
+    post:
+      tags: [Campaigns]
+      summary: Add a creative to a campaign (rotation / A-B test)
+      description: >
+        Up to 5 creatives. The campaign is re-screened and goes back to review unless auto-approved. Creatives rotate by Thompson sampling on CTR.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [campaignId, creative], properties: { campaignId: { type: string }, creative: { type: object } } } } } }
+      responses:
+        '201': { description: Added., content: { application/json: { schema: { type: object } } } }
+        '400': { description: Creative rejected., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Campaign not found., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Creative limit reached., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/report/breakdown:
+    get:
+      tags: [Campaigns]
+      summary: Report by dimension
+      description: >
+        Advertisers by campaign, app, creative, country or format. Publishers by app, placement, country or format. Publishers never see advertiser spend.
+      security: [{ bearer: [] }]
+      parameters: [{ name: by, in: query, schema: { type: string } }]
+      responses:
+        '200': { description: Rows., content: { application/json: { schema: { type: object } } } }
+        '400': { description: Unknown dimension., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/placements:
+    post:
+      tags: [Apps]
+      summary: Create an ad placement with its own format and floor (publisher)
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [appId, name, format], properties: { appId: { type: string }, name: { type: string }, format: { type: string, enum: [banner, interstitial, native, video, playable, rewarded] }, floorEcpm: { type: number } } } } } }
+      responses:
+        '201': { description: Created., content: { application/json: { schema: { type: object } } } }
+        '400': { description: Invalid input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: App not found., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      tags: [Apps]
+      summary: List placements
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Placements., content: { application/json: { schema: { type: object } } } }
+  /api/apps/reward:
+    post:
+      tags: [Apps]
+      summary: Configure rewarded video for an app (publisher)
+      description: >
+        Sets the HTTPS callback MobiAd calls (signed with X-MobiAd-Signature = sha256=HMAC(secret, raw body)) after a verified full playback. The secret is returned once.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id, callbackUrl], properties: { id: { type: string }, callbackUrl: { type: string }, amount: { type: integer }, item: { type: string }, rotateSecret: { type: boolean } } } } } }
+      responses:
+        '200': { description: Configured; includes secret the first time or when rotated., content: { application/json: { schema: { type: object } } } }
+        '400': { description: Invalid callback URL or reward., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: App not found., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/admin/partners:
+    get:
+      tags: [Admin]
+      summary: List external demand partners (OpenRTB DSPs) with impression and gross revenue
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Partners., content: { application/json: { schema: { type: object } } } }
+    post:
+      tags: [Admin]
+      summary: Add a demand partner to the unified auction
+      description: >
+        Partners receive OpenRTB 2.6 bid requests (banner, interstitial, video, rewarded) and compete with MobiAd campaigns in one second-price auction. Child-directed traffic only goes to partners marked childSafe.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, endpointUrl], properties: { name: { type: string }, endpointUrl: { type: string }, authHeader: { type: string }, timeoutMs: { type: integer, minimum: 50, maximum: 500 }, formats: { type: array, items: { type: string } }, childSafe: { type: boolean } } } } } }
+      responses:
+        '201': { description: Created., content: { application/json: { schema: { type: object } } } }
+        '400': { description: Invalid input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/admin/partners/status:
+    post:
+      tags: [Admin]
+      summary: Pause or activate a demand partner
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id, status], properties: { id: { type: string }, status: { type: string, enum: [active, paused] } } } } } }
+      responses:
+        '200': { description: Updated., content: { application/json: { schema: { type: object } } } }
+        '400': { description: Invalid input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/webhooks/events:
+    get:
+      tags: [Account]
+      summary: Event names you can subscribe to
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Event names., content: { application/json: { schema: { type: object } } } }
+  /api/webhooks:
+    post:
+      tags: [Account]
+      summary: Create a webhook
+      description: >
+        Events are POSTed as JSON with X-MobiAd-Signature = t=<unix>,v1=HMAC-SHA256(secret, "<t>.<raw body>"). Delivery is at-least-once with retries after 1 m, 5 m, 30 m, 2 h and 12 h; de-duplicate on the event id. The secret is returned once. Max 5 per account.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [url], properties: { url: { type: string }, events: { type: array, items: { type: string } } } } } } }
+      responses:
+        '201': { description: Created; includes secret., content: { application/json: { schema: { type: object } } } }
+        '400': { description: Invalid URL or event., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Webhook limit reached., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      tags: [Account]
+      summary: List webhooks (no secrets)
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Webhooks., content: { application/json: { schema: { type: object } } } }
+  /api/webhooks/delete:
+    post:
+      tags: [Account]
+      summary: Delete a webhook
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } } }
+      responses:
+        '200': { description: Deleted., content: { application/json: { schema: { type: object } } } }
+        '404': { description: Not found., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/webhooks/test:
+    post:
+      tags: [Account]
+      summary: Queue a ping event to a webhook
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } } }
+      responses:
+        '202': { description: Queued., content: { application/json: { schema: { type: object } } } }
+        '404': { description: Not found., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/webhooks/deliveries:
+    get:
+      tags: [Account]
+      summary: Recent deliveries of a webhook
+      security: [{ bearer: [] }]
+      parameters: [{ name: id, in: query, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Deliveries., content: { application/json: { schema: { type: object } } } }
+  /api/billing/invoices/generate:
+    post:
+      tags: [Billing]
+      summary: Issue the invoice for a completed month (advertiser)
+      description: >
+        Idempotent per month. Amounts are net of tax; tax invoices are not provided.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [month], properties: { month: { type: string, example: 2026-09 } } } } } }
+      responses:
+        '201': { description: Issued., content: { application/json: { schema: { type: object } } } }
+        '200': { description: Already issued., content: { application/json: { schema: { type: object } } } }
+        '409': { description: Month not closed or nothing to invoice., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/billing/invoices:
+    get:
+      tags: [Billing]
+      summary: List invoices (advertiser)
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Invoices., content: { application/json: { schema: { type: object } } } }
+  /api/billing/invoice:
+    get:
+      tags: [Billing]
+      summary: One invoice as JSON or CSV (format=csv)
+      security: [{ bearer: [] }]
+      parameters: [{ name: id, in: query, required: true, schema: { type: string } }, { name: format, in: query, schema: { type: string, enum: [csv] } }]
+      responses:
+        '200': { description: Invoice., content: { application/json: { schema: { type: object } } } }
+        '404': { description: Not found., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/billing/credit-notes:
+    get:
+      tags: [Billing]
+      summary: List credit notes (advertiser)
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Credit notes., content: { application/json: { schema: { type: object } } } }
+  /api/admin/credit-notes:
+    post:
+      tags: [Admin]
+      summary: Issue a credit note (adds the amount to the advertiser wallet)
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [userId, amountUsd, reason], properties: { userId: { type: string }, amountUsd: { type: number }, reason: { type: string }, invoiceId: { type: string } } } } } }
+      responses:
+        '201': { description: Issued., content: { application/json: { schema: { type: object } } } }
+        '400': { description: Invalid input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /rtb/v2.6/bid:
+    post:
+      tags: [Ads]
+      summary: OpenRTB 2.6 bid request (exchange to MobiAd)
+      description: >
+        An exchange registers as an app and sends a BidRequest with `app.id` set to that appId. Banner impressions in USD only;
+        anything else is a no-bid (204). The returned `nurl` is our signed impression URL - call it on win; nothing is billed at bid time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [id, imp], properties: { id: { type: string }, imp: { type: array, items: { type: object } }, app: { type: object }, device: { type: object }, regs: { type: object }, user: { type: object } } }
+      responses:
+        '200': { description: BidResponse with one seatbid., content: { application/json: { schema: { type: object } } } }
+        '204': { description: No bid. }
+        '400': { description: Invalid BidRequest., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: Rate limited per client IP., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /t/i/{token}:
+    get:
+      tags: [Ads]
+      summary: Report an impression
+      description: Returns a 1x1 GIF. Idempotent per token (repeats are not billed twice).
+      parameters: [{ $ref: '#/components/parameters/Token' }]
+      responses:
+        '200': { description: Counted (or duplicate)., content: { image/gif: { schema: { type: string, format: binary } } } }
+        '400': { description: 'Invalid, forged or expired token.' }
+  /t/c/{token}:
+    get:
+      tags: [Ads]
+      summary: Report a click and redirect to the landing page
+      description: |
+        Always answers 302 to the advertiser's landing page when the token is valid. The click is billed only if it passes
+        invalid-traffic checks (an impression must have been reported, at least 400 ms must have passed, and no IP flooding);
+        otherwise it is recorded as an invalid click at zero cost.
+      parameters: [{ $ref: '#/components/parameters/Token' }]
+      responses:
+        '302': { description: Redirect to the landing page., headers: { Location: { schema: { type: string, format: uri } } } }
+        '400': { description: Invalid token. }
+  /t/x/{token}:
+    get:
+      tags: [Ads]
+      summary: Report an install attributed to the ad
+      parameters: [{ $ref: '#/components/parameters/Token' }]
+      responses:
+        '200': { description: Recorded., content: { image/gif: { schema: { type: string, format: binary } } } }
+        '400': { description: Invalid token. }
+  /t/v/{token}:
+    get:
+      tags: [Ads]
+      summary: Report that a video played to completion
+      description: Never billed. Idempotent per token. Counted in reports as videoCompletes.
+      parameters: [{ $ref: '#/components/parameters/Token' }]
+      responses:
+        '200': { description: Recorded., content: { image/gif: { schema: { type: string, format: binary } } } }
+        '400': { description: Invalid token. }
+  /t/w/{token}:
+    get:
+      tags: [Ads]
+      summary: Report that the ad was viewable (at least 50% of it on screen for 1 second in a row)
+      description: Never billed. Idempotent per token. Only counted after an impression of the same ad was counted. Drives the viewability rate (viewable impressions / impressions) in reports.
+      parameters: [{ $ref: '#/components/parameters/Token' }]
+      responses:
+        '200': { description: Recorded., content: { image/gif: { schema: { type: string, format: binary } } } }
+        '400': { description: Invalid token. }
+  /v1/conversion:
+    post:
+      tags: [Ads]
+      summary: Server-to-server conversion postback (attribution)
+      description: >
+        Authorization: Bearer <write-scope API key of the campaign owner>. `clickId` is the `mobiad_click_id` query parameter MobiAd appends to your
+        landing URL on every accepted (valid, first) click; keep it with the user and send it back when they convert. Last-click attribution inside the
+        campaign's window (1-30 days, default 7). Replays of the same (clickId, event, eventId) never double-count or double-bill. On CPA campaigns the
+        campaign's `conversionEvent` is billed at the bid; other events are recorded free.
+      security: [{ bearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [clickId, event], properties: { clickId: { type: string }, event: { type: string, pattern: '^[a-z0-9_]{1,32}$' }, eventId: { type: string, maxLength: 128 }, value: { type: number, minimum: 0, maximum: 1000000, description: Revenue in USD. } } } } } }
+      responses:
+        '200': { description: Counted (or a duplicate, flagged with duplicate=true). }
+        '400': { description: Invalid event or value., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Missing, read-only or invalid API key., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: The click does not belong to your campaigns., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '410': { description: Unknown, forged or expired clickId (outside the attribution window)., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: Rate limited per API key., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/signup:
+    post:
+      tags: [Auth]
+      summary: Create an advertiser or publisher account
+      description: During the private beta (INVITE_ONLY, the production default) the body must include a valid `inviteCode`; every failure returns the same generic answer. Sends a verification email. Password policy - at least 10 characters, not common, must not contain the email name.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Signup' } } } }
+      responses:
+        '201': { description: Created., content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { description: Email already registered. }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      description: If MFA is enabled and `code` is missing the response is 401 with `error=mfa_required`.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Login' } } } }
+      responses:
+        '200': { description: Logged in., content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { description: 'Bad credentials, mfa_required or invalid_code.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/me:
+    get:
+      tags: [Auth]
+      summary: Current account
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: Account., content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /api/verify-email:
+    post:
+      tags: [Auth]
+      summary: Confirm an email address with the single-use token from the emailed link
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token], properties: { token: { type: string } } } } } }
+      responses: { '200': { description: Verified. }, '400': { description: Invalid or expired token. } }
+  /api/resend-verification:
+    post:
+      tags: [Auth]
+      summary: Re-send the verification email (rate limited)
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Sent. }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /api/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Start a password reset
+      description: Always returns 200 so the endpoint cannot reveal which emails have accounts.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
+      responses: { '200': { description: Accepted. }, '429': { $ref: '#/components/responses/RateLimited' } }
+  /api/reset-password:
+    post:
+      tags: [Auth]
+      summary: Finish a password reset (revokes all sessions; requires an MFA code when MFA is enabled)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token, password], properties: { token: { type: string }, password: { type: string }, code: { type: string } } } } } }
+      responses: { '200': { description: Password changed. }, '400': { $ref: '#/components/responses/BadRequest' }, '401': { description: MFA code required or invalid. } }
+  /api/change-password:
+    post:
+      tags: [Auth]
+      security: [{ bearer: [] }]
+      summary: Change password (revokes other sessions, returns a fresh token)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [currentPassword, newPassword], properties: { currentPassword: { type: string }, newPassword: { type: string } } } } } }
+      responses: { '200': { description: Changed., content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/logout-all:
+    post:
+      tags: [Auth]
+      security: [{ bearer: [] }]
+      summary: Revoke every session of the account
+      responses: { '200': { description: Done. } }
+  /api/mfa/setup:
+    post:
+      tags: [Auth]
+      security: [{ bearer: [] }]
+      summary: Begin TOTP setup (returns the secret and an otpauth URL)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [password], properties: { password: { type: string } } } } } }
+      responses: { '200': { description: Secret. }, '409': { description: Already enabled. } }
+  /api/mfa/enable:
+    post:
+      tags: [Auth]
+      security: [{ bearer: [] }]
+      summary: Confirm TOTP setup with a code; returns 8 one-time recovery codes
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } } }
+      responses: { '200': { description: Enabled. }, '400': { description: Invalid code. } }
+  /api/mfa/disable:
+    post:
+      tags: [Auth]
+      security: [{ bearer: [] }]
+      summary: Turn MFA off (needs password and a code)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [password, code], properties: { password: { type: string }, code: { type: string } } } } } }
+      responses: { '200': { description: Disabled. }, '400': { description: Password or code incorrect. } }
+  /api/account/export:
+    get:
+      tags: [Auth]
+      security: [{ bearer: [] }]
+      summary: Download all data held about the account (GDPR/CCPA access and portability)
+      responses: { '200': { description: JSON export. } }
+  /api/account:
+    delete:
+      tags: [Auth]
+      security: [{ bearer: [] }]
+      summary: Delete the account (erasure). Refused while money is owed either way.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [password, confirm], properties: { password: { type: string }, confirm: { type: string, enum: [DELETE] }, code: { type: string } } } } } }
+      responses: { '200': { description: Deleted. }, '409': { description: balance_remaining or earnings_remaining. } }
+  /api/campaigns:
+    get:
+      tags: [Campaigns]
+      security: [{ bearer: [] }]
+      summary: List my campaigns with stats and review status
+      responses: { '200': { description: Campaigns., content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Campaign' } } } } } }
+    post:
+      tags: [Campaigns]
+      security: [{ bearer: [] }]
+      summary: Create a campaign (advertisers, verified email)
+      description: Hard policy failures return 400 `creative_rejected` with reasons. Soft flags or production mode put it in `pending` review. Insufficient wallet funds return 402.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CampaignInput' } } } }
+      responses:
+        '201': { description: Created., content: { application/json: { schema: { $ref: '#/components/schemas/Campaign' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '402': { description: insufficient_funds., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: email_not_verified. }
+  /api/campaigns/status:
+    post:
+      tags: [Campaigns]
+      security: [{ bearer: [] }]
+      summary: Pause or resume a campaign
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id, status], properties: { id: { type: string }, status: { type: string, enum: [active, paused] } } } } } }
+      responses: { '200': { description: Updated. }, '409': { description: Budget exhausted. } }
+  /api/apps:
+    get:
+      tags: [Apps]
+      security: [{ bearer: [] }]
+      summary: List my apps with stats
+      responses: { '200': { description: Apps., content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/App' } } } } } }
+    post:
+      tags: [Apps]
+      security: [{ bearer: [] }]
+      summary: Register an app (publishers, verified email)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AppInput' } } } }
+      responses: { '201': { description: Created., content: { application/json: { schema: { $ref: '#/components/schemas/App' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/report:
+    get:
+      tags: [Campaigns, Apps]
+      security: [{ bearer: [] }]
+      summary: Totals and daily performance
+      responses: { '200': { description: Report., content: { application/json: { schema: { $ref: '#/components/schemas/Report' } } } } }
+  /api/report.csv:
+    get:
+      tags: [Campaigns, Apps]
+      security: [{ bearer: [] }]
+      summary: Daily performance as CSV (spreadsheet-formula safe)
+      responses: { '200': { description: CSV., content: { text/csv: { schema: { type: string } } } } }
+  /api/billing/summary:
+    get:
+      tags: [Billing]
+      security: [{ bearer: [] }]
+      summary: Wallet (advertiser) or earnings and payouts (publisher)
+      responses: { '200': { description: Summary. } }
+  /api/billing/topup:
+    post:
+      tags: [Billing]
+      security: [{ bearer: [] }]
+      summary: Add funds. Returns a hosted checkout URL (Stripe mode), credits instantly (test mode) or 501 (disabled).
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [amountUsd], properties: { amountUsd: { type: number, minimum: 10, maximum: 10000 } } } } } }
+      responses: { '200': { description: Checkout URL or credited. }, '400': { $ref: '#/components/responses/BadRequest' }, '501': { description: payments_disabled. } }
+  /api/billing/payout:
+    post:
+      tags: [Billing]
+      security: [{ bearer: [] }]
+      summary: Request a payout of payable earnings (publishers)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [amountUsd], properties: { amountUsd: { type: number } } } } } }
+      responses: { '201': { description: Requested. }, '409': { description: exceeds_payable (flagged apps are held). } }
+  /api/billing/statement:
+    get:
+      tags: [Billing]
+      security: [{ bearer: [] }]
+      summary: Monthly statement as CSV
+      parameters: [{ name: month, in: query, schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' } }]
+      responses: { '200': { description: CSV., content: { text/csv: { schema: { type: string } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/billing/payments:
+    get:
+      tags: [Billing]
+      security: [{ bearer: [] }]
+      summary: The advertiser's own payment attempts and their outcome (paid, pending, failed with a reason, expired, refunded, disputed)
+      responses: { '200': { description: Payments with the newest first. } }
+  /api/billing/profile:
+    get:
+      tags: [Billing]
+      security: [{ bearer: [] }]
+      summary: Billing details printed on tax invoices (advertisers)
+      responses: { '200': { description: The saved billing details and the active tax mode. } }
+    post:
+      tags: [Billing]
+      security: [{ bearer: [] }]
+      summary: Save billing details (legal name, address, 2-letter country, optional tax id)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [legalName, address, country], properties: { legalName: { type: string }, address: { type: string }, country: { type: string, pattern: '^[A-Za-z]{2}$' }, taxId: { type: string } } } } } }
+      responses: { '200': { description: Saved. }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/admin/payments:
+    get: { tags: [Admin], security: [{ bearer: [] }], summary: Advertiser top-ups with status and the refundable remainder, responses: { '200': { description: Payments. }, '403': { description: Not an admin / MFA required. } } }
+  /api/admin/disputes:
+    get: { tags: [Admin], security: [{ bearer: [] }], summary: Card disputes (chargebacks) and their status, responses: { '200': { description: Disputes. }, '403': { description: Not an admin / MFA required. } } }
+  /api/admin/disputes/evidence:
+    post:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Send evidence for an open card dispute to Stripe (once). MobiAd adds the customer's e-mail, billing details, top-up date and platform usage from its own records.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [disputeId, explanation], properties: { disputeId: { type: string }, explanation: { type: string, minLength: 20, maxLength: 4000 }, submit: { type: boolean, default: true, description: false saves a draft at Stripe only. } } } } } }
+      responses: { '200': { description: Sent (or saved as draft). }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { description: Unknown dispute. }, '409': { description: The dispute is closed or evidence was already submitted. }, '501': { description: Not in Stripe mode. }, '502': { description: Stripe refused. } }
+  /api/admin/payments/refund:
+    post:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Refund all or part of a payment to the card. Only unspent money can be refunded. In Stripe mode the wallet is debited when Stripe confirms by webhook.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [paymentId, reason], properties: { paymentId: { type: string }, amountUsd: { type: number, description: Omit to refund the whole remainder. }, reason: { type: string, maxLength: 300 } } } } } }
+      responses: { '200': { description: Refunded immediately (test mode). }, '202': { description: Requested from Stripe. }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { description: Unknown payment. }, '409': { description: not_refundable or exceeds_available (already spent on ads). }, '502': { description: Stripe refused the refund. } }
+  /api/public-config:
+    get: { tags: [Auth], summary: 'Public settings the sign-up form needs ({ inviteOnly })', responses: { '200': { description: Settings. } } }
+  /api/admin/invites:
+    get: { tags: [Admin], security: [{ bearer: [] }], summary: Sign-up invites with status (open, used up, expired, revoked), responses: { '200': { description: Invites. }, '403': { description: Not an admin / MFA required. } } }
+    post:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Create a sign-up invite. The code is returned once; only its SHA-256 hash is stored. With an e-mail the code is locked to it and mailed.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [role], properties: { role: { type: string, enum: [advertiser, publisher] }, email: { type: string, format: email }, note: { type: string, maxLength: 200 }, maxUses: { type: integer, minimum: 1, maximum: 50, default: 1 }, expiresInDays: { type: integer, minimum: 1, maximum: 90, default: 14 } } } } } }
+      responses: { '201': { description: Created (includes the one-time code). }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/admin/invites/revoke:
+    post: { tags: [Admin], security: [{ bearer: [] }], summary: Revoke an invite, requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } } }, responses: { '200': { description: Revoked. }, '404': { description: Unknown invite. } } }
+  /api/billing/connect/start:
+    post: { tags: [Billing], security: [{ bearer: [] }], summary: 'Publisher: create the Stripe Connect Express account (once) and return a hosted onboarding link', responses: { '200': { description: '{ url }' }, '501': { description: Payouts are manual in this deployment. }, '502': { description: Stripe error. } } }
+  /api/billing/connect/status:
+    get: { tags: [Billing], security: [{ bearer: [] }], summary: 'Publisher: payout account readiness (add ?refresh=1 to ask Stripe now)', responses: { '200': { description: '{ mode, connected, detailsSubmitted, payoutsEnabled, requirements, autoPayoutMaxUsd }' } } }
+  /api/admin/payouts/send:
+    post:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Pay an approved payout as a Stripe transfer, exactly once (idempotency key payout-<id>). approve=true approves a requested payout first, under the same KYC/tax rules.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string }, approve: { type: boolean } } } } } }
+      responses: { '200': { description: Paid; reference is the Stripe transfer id. }, '404': { description: Unknown payout. }, '409': { description: not_approved, verification_missing or payout account not ready. }, '501': { description: Payouts are manual in this deployment. }, '502': { description: Stripe refused; the payout stays approved and can be retried. } }
+  /api/webhooks/stripe:
+    post:
+      tags: [Billing]
+      summary: Stripe webhook (signature verified; every handler is idempotent). Handles paid, failed, expired, refunded and dispute created or closed events.
+      parameters: [{ name: Stripe-Signature, in: header, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: Received. }, '400': { description: Invalid signature. } }
+  /api/admin/overview:
+    get: { tags: [Admin], security: [{ bearer: [] }], summary: Counts for the console home, responses: { '200': { description: Counts. }, '403': { description: Not an admin / MFA required. } } }
+  /api/admin/campaigns:
+    get:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Campaigns by review status
+      parameters: [{ name: status, in: query, schema: { type: string, enum: [pending, approved, rejected], default: pending } }]
+      responses: { '200': { description: Campaigns. } }
+  /api/admin/campaigns/review:
+    post:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Approve or reject a campaign (rejection needs a reason; advertiser is emailed; audited)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id, decision], properties: { id: { type: string }, decision: { type: string, enum: [approve, reject] }, note: { type: string } } } } } }
+      responses: { '200': { description: Reviewed. } }
+  /api/admin/apps/flagged:
+    get: { tags: [Admin], security: [{ bearer: [] }], summary: Apps flagged for invalid traffic (earnings held), responses: { '200': { description: Apps. } } }
+  /api/admin/apps/flag:
+    post:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Flag or clear an app
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id, flagged], properties: { id: { type: string }, flagged: { type: boolean }, reason: { type: string } } } } } }
+      responses: { '200': { description: Updated. } }
+  /api/admin/users:
+    get: { tags: [Admin], security: [{ bearer: [] }], summary: List users, responses: { '200': { description: Users. } } }
+  /api/admin/audit:
+    get:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Audit log (newest first)
+      parameters: [{ name: limit, in: query, schema: { type: integer, maximum: 1000 } }, { name: actor, in: query, schema: { type: string } }, { name: action, in: query, schema: { type: string } }]
+      responses: { '200': { description: Entries. } }
+  /api/admin/wallet/credit:
+    post:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Manual wallet credit or adjustment (note required; idempotent by `reference`)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [userId, amountUsd, note], properties: { userId: { type: string }, amountUsd: { type: number }, note: { type: string }, reference: { type: string } } } } } }
+      responses: { '200': { description: Applied or ignored duplicate. } }
+  /api/admin/payouts:
+    get: { tags: [Admin], security: [{ bearer: [] }], summary: Payout requests, responses: { '200': { description: Payouts. } } }
+  /api/admin/payouts/resolve:
+    post:
+      tags: [Admin]
+      security: [{ bearer: [] }]
+      summary: Move a payout along requested to approved or rejected, and approved to paid (reference required) or rejected
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id, status], properties: { id: { type: string }, status: { type: string, enum: [approved, paid, rejected] }, note: { type: string }, reference: { type: string, description: Bank or PayPal transaction id; required for paid. } } } } } }
+      responses: { '200': { description: Resolved. }, '400': { description: Invalid status or missing reference. }, '404': { description: Unknown payout. }, '409': { description: Invalid transition or verification missing. } }
+  /healthz:
+    get: { tags: [Ops], summary: Liveness, responses: { '200': { description: OK. } } }
+  /readyz:
+    get: { tags: [Ops], summary: Readiness (200 with db=down when degraded; 503 only before the catalog loads), responses: { '200': { description: Ready. }, '503': { description: Not ready. } } }
+  /metrics:
+    get:
+      tags: [Ops]
+      summary: Prometheus metrics (requires METRICS_TOKEN in production)
+      security: [{ bearer: [] }]
+      responses: { '200': { description: Text exposition format., content: { text/plain: { schema: { type: string } } } } }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Token: { name: token, in: path, required: true, schema: { type: string }, description: 'Signed, expiring tracking token from the ad response.' }
+  responses:
+    BadRequest: { description: Validation error., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthenticated: { description: 'Missing, invalid or revoked token.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    RateLimited: { description: Too many requests., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Error: { type: object, required: [error], properties: { error: { type: string }, detail: { type: string }, reasons: { type: array, items: { type: string } } } }
+    Consent:
+      type: object
+      properties:
+        gdpr: { type: boolean }
+        gdprConsent: { type: string, description: IAB TCF consent string }
+        coppa: { type: boolean }
+        usPrivacy: { type: string, example: 1YNN }
+        limitAdTracking: { type: boolean }
+    AdRequest:
+      type: object
+      required: [appId]
+      properties:
+        appId: { type: string }
+        format: { type: string, enum: [banner, interstitial, native, video, playable, rewarded], default: banner }
+        placementId: { type: string, description: One of your placements; supplies the default format and an additional floor. }
+        language: { type: string, example: en }
+        deviceType: { type: string, enum: [phone, tablet] }
+        osVersion: { type: string, example: '17.2' }
+        connection: { type: string, enum: [wifi, cellular] }
+        userId: { type: string, maxLength: 128, description: Your own user id; sent back in the signed reward callback for rewarded ads. }
+        test: { type: boolean, description: Test mode - a canned ad with no auction, billing or tracking. }
+        country: { type: string, example: US }
+        deviceId: { type: string, maxLength: 128, description: Optional. Ignored unless consent and the app's settings allow it. Never stored raw. }
+        consent: { $ref: '#/components/schemas/Consent' }
+    AdResponse:
+      type: object
+      properties:
+        creative: { type: object, properties: { title: { type: string }, image: { type: string }, videoUrl: { type: string, format: uri }, durationSec: { type: integer }, playableUrl: { type: string, format: uri, description: Render only in a sandboxed WebView/iframe without same-origin or top navigation. }, cta: { type: string }, body: { type: string }, iconUrl: { type: string, format: uri }, sponsor: { type: string }, rating: { type: number } } }
+        impressionUrl: { type: string, format: uri }
+        clickUrl: { type: string, format: uri }
+        installUrl: { type: string, format: uri }
+        external: { type: object, description: 'Partner demand won the unified auction. Render ONLY in a sandboxed iframe/WebView; the markup handles its own clicks (no clickUrl).', properties: { markup: { type: string, enum: [html, vast] }, adm: { type: string }, width: { type: integer }, height: { type: integer } } }
+        reward: { type: object, description: Rewarded slots. Grant only after your server receives the signed callback., properties: { amount: { type: integer }, item: { type: string } } }
+        test: { type: boolean }
+        videoCompleteUrl: { type: string, format: uri, description: Present for video ads. }
+        viewableUrl: { type: string, format: uri, description: Call once the ad was viewable (50% on screen for 1 s). Never billed. }
+    Signup: { type: object, required: [email, password, role], properties: { email: { type: string, format: email }, password: { type: string, minLength: 10 }, role: { type: string, enum: [advertiser, publisher] }, inviteCode: { type: string, description: 'MA-XXXX-XXXX-XXXX, required while sign-up is invite-only' } } }
+    Login: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string }, code: { type: string, description: TOTP or one-time recovery code } } }
+    Session: { type: object, properties: { token: { type: string }, role: { type: string }, email: { type: string }, emailVerified: { type: boolean }, mfaEnabled: { type: boolean } } }
+    Me: { type: object, properties: { id: { type: string }, email: { type: string }, role: { type: string }, emailVerified: { type: boolean }, mfaEnabled: { type: boolean } } }
+    CampaignInput:
+      type: object
+      required: [name, bid, budget, clickUrl]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        model: { type: string, enum: [CPM, CPC] }
+        bid: { type: number }
+        budget: { type: number }
+        dailyBudget: { type: number }
+        clickUrl: { type: string, format: uri }
+        image: { type: string, format: uri }
+        category: { type: string }
+        childSafe: { type: boolean }
+        freqCap: { type: integer, minimum: 0, maximum: 100 }
+        countries: { type: array, items: { type: string } }
+        platforms: { type: array, items: { type: string, enum: [android, ios] } }
+    Campaign: { type: object, properties: { id: { type: string }, name: { type: string }, status: { type: string }, reviewStatus: { type: string, enum: [pending, approved, rejected] }, reviewNote: { type: string, nullable: true } } }
+    AppInput: { type: object, required: [name], properties: { name: { type: string }, platform: { type: string, enum: [android, ios] }, floorEcpm: { type: number }, childDirected: { type: boolean }, blockedCategories: { type: array, items: { type: string } } } }
+    App: { type: object, properties: { id: { type: string }, name: { type: string }, flagged: { type: boolean } } }
+    Report: { type: object, properties: { total: { $ref: '#/components/schemas/Totals' }, daily: { type: object, additionalProperties: { $ref: '#/components/schemas/Totals' } } } }
+    Totals: { type: object, properties: { impressions: { type: integer }, clicks: { type: integer }, installs: { type: integer }, invalidClicks: { type: integer }, spend: { type: number }, publisherRevenue: { type: number }, ctr: { type: number } } }

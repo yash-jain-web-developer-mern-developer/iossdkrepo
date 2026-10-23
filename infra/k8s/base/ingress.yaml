@@ -1,0 +1,20 @@
+# Public entry point. Requires an ingress controller (nginx shown) and cert-manager for TLS. Not applied by `kustomize build base`
+# so clusters without a controller still work; apply it explicitly:  kubectl apply -f ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mobiad
+  namespace: mobiad
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 256k
+    nginx.ingress.kubernetes.io/limit-rps: "200"          # coarse edge rate limit (per client IP); the app has its own limits
+spec:
+  ingressClassName: nginx
+  tls: [{ hosts: [ads.example.com], secretName: mobiad-tls }]
+  rules:
+    - host: ads.example.com
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: mobiad, port: { name: http } } } }

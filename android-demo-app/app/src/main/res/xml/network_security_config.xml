@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEMO ONLY: allows plain-http to the local demo server (the emulator reaches the host at 10.0.2.2). A production app must use https. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

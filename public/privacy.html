@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy Policy – MobiAd</title>
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/site.css">
+<script src="/site.js" defer></script>
+</head>
+<body>
+<header class="site-nav"><div class="wrap"><a class="logo" href="/">MobiAd</a><nav class="menu always"><a href="/terms">Terms</a><a class="btn small" href="/app">Dashboard</a></nav><div class="menu-tools"><button class="theme-btn" id="theme" type="button" aria-label="Toggle dark mode">◐</button></div></div></header>
+<main class="legal">
+<div class="banner"><b>DRAFT – not yet reviewed by counsel.</b> This text describes what the software actually does today. Replace the bracketed placeholders and have a qualified lawyer review it before publishing.</div>
+<h1>Privacy Policy</h1>
+<p>Version 2026-10-DRAFT · Controller: <b>[COMPANY LEGAL NAME]</b>, [ADDRESS] · Contact: <b>[PRIVACY CONTACT EMAIL]</b></p>
+
+<h2>1. Who this covers</h2>
+<p>This policy covers (a) <b>advertisers and publishers</b> who create a MobiAd account, and (b) <b>people who see or tap ads</b> served by MobiAd inside apps. MobiAd is a contextual advertising platform: it does not build advertising profiles of individual people.</p>
+
+<h2>2. What we collect and why</h2>
+<table>
+<thead><tr><th>Data</th><th>Whose</th><th>Purpose / lawful basis*</th><th>Kept for</th></tr></thead>
+<tbody>
+<tr><td>Email address, role, password (stored only as a salted scrypt hash), email-verified flag, which Terms version you accepted and when</td><td>Account holders</td><td>Provide and secure the service; contract</td><td>While the account exists</td></tr>
+<tr><td>Two-step login secret (encrypted at rest) and hashed recovery codes</td><td>Account holders who enable it</td><td>Account security; legitimate interests</td><td>Until you turn it off or delete the account</td></tr>
+<tr><td>Security/audit log (sign-ins, password and MFA changes, reviews, payouts) tied to your account id</td><td>Account holders</td><td>Security and fraud prevention; legitimate interests; legal claims</td><td>400 days</td></tr>
+<tr><td>Campaigns, creatives (links), apps, settings</td><td>Advertisers / publishers</td><td>Provide the service; contract</td><td>While the account exists</td></tr>
+<tr><td>Billing ledger: campaign id, app id, event type, amount, time (no personal data)</td><td>Advertisers / publishers</td><td>Accurate billing; legal accounting obligations</td><td>[7] years (kept even after account deletion)</td></tr>
+<tr><td>Wallet credits, payout requests</td><td>Advertisers / publishers</td><td>Contract; accounting obligations</td><td>[7] years</td></tr>
+<tr><td>Ad requests: app id, country, format, consent signals</td><td>People who see ads</td><td>Serve a relevant ad without profiling; legitimate interests / consent signals honored</td><td>Processed transiently; not stored with identity</td></tr>
+<tr><td>Optional device identifier — <b>only</b> if the app passes it and consent allows — hashed with the app, the day and a secret, used only to cap how often one ad is shown</td><td>People who see ads</td><td>Frequency capping; consent where required</td><td>Counter expires within 24 hours; the raw identifier is never stored</td></tr>
+<tr><td>IP address — used in memory/cache for abuse limits and click-fraud detection</td><td>Everyone</td><td>Security and invalid-traffic prevention; legitimate interests</td><td>Seconds to minutes. Not written to our database. (Your hosting/load-balancer logs may keep IPs: see <b>[HOSTING PROVIDER]</b> settings.)</td></tr>
+</tbody></table>
+<p>* Counsel to confirm lawful bases for your jurisdictions.</p>
+
+<h2>3. What we do <u>not</u> do</h2>
+<ul><li>No advertising cookies or cross-site tracking; the dashboard stores a session token in the browser tab only (it disappears when you close the tab).</li>
+<li>No sale of personal data. No behavioural profiles. Device identifiers are not stored.</li>
+<li>For <b>child-directed apps</b>, COPPA/GDPR-K signals, “limit ad tracking”, GDPR requests without a consent string, and US opt-out strings, device identifiers are ignored entirely and only child-safe, contextual ads are eligible.</li></ul>
+
+<h2>4. Who receives data (processors)</h2>
+<p>Cloud hosting (<b>[PROVIDER, REGION]</b>), email delivery (<b>[SMTP PROVIDER]</b>), payment processing (<b>[Stripe, if enabled]</b>), and the managed database/cache/message services we run on. Each is bound by a data-processing agreement. <b>[List transfers outside your region and the safeguards used, e.g. SCCs.]</b></p>
+
+<h2>5. Your rights</h2>
+<p>In the dashboard (<b>Security</b> tab) you can <b>download all your data</b> and <b>delete your account</b>. Deletion removes your account, apps and settings; billing records are kept as required by law and contain only opaque ids. You may also ask us to correct data, restrict or object to processing, or complain to your data-protection authority. Contact <b>[PRIVACY CONTACT EMAIL]</b>. We answer within one month.</p>
+
+<h2>6. Security</h2>
+<p>Passwords are hashed with scrypt; optional two-step login; admin accounts require it; encrypted connections to our databases; signed, expiring tracking links; audit logging; regular dependency, container and code scanning. No system is perfectly secure; we will notify affected users and authorities of a personal-data breach as the law requires.</p>
+
+<h2>7. Changes</h2>
+<p>If we change this policy materially we will update the version above and ask you to accept it again.</p>
+</main>
+</body>
+</html>

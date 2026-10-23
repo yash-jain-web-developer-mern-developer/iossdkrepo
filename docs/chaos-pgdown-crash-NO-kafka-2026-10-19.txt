@@ -1,0 +1,61 @@
+[t=5s] KILL postgres
+[t=15s] HARD-KILL app2 while Postgres is DOWN
+[t=25s] RESTORE postgres
+[t=30s] RESTART app2
+sec  ok/s  fail/s  maxlatency(ms)
+  0   264      0      275
+  1   344      0      142
+  2   378      0      138
+  3   438      0       93
+  4   461      0      660
+  5   213      0      660
+  6   457      0      102
+  7   493      0       92
+  8   556      0       78
+  9   551      0       88
+ 10   484      0       88
+ 11   474      0      128
+ 12   576      0       74
+ 13   595      0       92
+ 14   486      0      114
+ 15    36      0     5648
+ 16     0      0        0
+ 17     0      0        0
+ 18   166      0     2054
+ 19   566      0       59
+ 20   555      0       62
+ 21   577      0     2054
+ 22   533      0       81
+ 23   639      0       76
+ 24   630      0      551
+ 25   266      0      564
+ 26   483      0     2081
+ 27   495      0       92
+ 28   503      0       77
+ 29   537      0      546
+ 30   240      0      549
+ 31   499      0       96
+ 32   459      0       83
+ 33   494      0       85
+ 34   522      0      103
+ 35   534      0       76
+ 36   447      0       95
+ 37   574      0       79
+ 38   526      0       74
+ 39   581      0       95
+ 40   543      0       78
+ 41   527      0       72
+ 42   517      0       93
+ 43   550      0       81
+ 44   568      0       83
+ 45   511      0       76
+ 46   500      0       85
+ 47   530      0      133
+ 48   538      0       83
+ 49   531      0       83
+
+confirmed by client: 22947 | in ledger: 21296 | LOSS
+mobiad-cluster-app3-1 Up About a minute (healthy)
+mobiad-cluster-app2-1 Up 52 seconds (healthy)
+mobiad-cluster-app1-1 Up About a minute (healthy)
+DONE

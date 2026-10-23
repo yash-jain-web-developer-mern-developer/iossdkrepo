@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobiad
+  namespace: mobiad
+  labels: { app: mobiad }
+spec:
+  replicas: 3
+  minReadySeconds: 10
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }   # never drop below desired capacity during a deploy
+  selector: { matchLabels: { app: mobiad } }
+  template:
+    metadata:
+      labels: { app: mobiad }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: mobiad
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 40   # preStop 8s + in-flight requests + ledger flush (<=10s) + Kafka disconnect
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - { maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app: mobiad } } }
+        - { maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app: mobiad } } }
+      containers:
+        - name: mobiad
+          image: ghcr.io/your-org/mobiad:latest   # replaced by kustomize `images:` (pin to a digest in production)
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: mobiad-config }
+            - secretRef: { name: mobiad-secrets }
+          startupProbe:                       # allows up to 90 s for Postgres/Kafka to be reachable at boot
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 3
+            failureThreshold: 30
+          readinessProbe:                     # 200 even when Postgres is down (degraded but serving ads)
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          lifecycle:
+            preStop:                          # keep serving while the endpoint is removed from load balancers
+              exec: { command: ["sleep", "8"] }
+          resources:
+            requests: { cpu: 500m, memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: { sizeLimit: 64Mi } }

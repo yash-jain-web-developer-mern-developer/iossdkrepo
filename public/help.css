@@ -1,0 +1,9 @@
+/* Help center layout */
+.help { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; padding-top: 48px; align-items: start; }
+.toc { position: sticky; top: 90px; display: grid; gap: 2px; font-size: 14px; }
+.toc b { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 8px; }
+.toc a { padding: 7px 12px; border-radius: var(--r-md); color: var(--muted); font-weight: 600; } .toc a:hover { background: var(--surface-2); color: var(--ink); }
+.articles h1 { font-size: clamp(32px, 4vw, 46px); } .articles .lead { color: var(--muted); font-size: 18px; margin-bottom: 36px; }
+.articles section { padding: 28px 0; border-top: 1px solid var(--line); scroll-margin-top: 90px; } .articles h2 { font-size: 24px; }
+.articles li { margin-bottom: .5em; } .articles pre { margin: 14px 0; }
+@media (max-width: 860px) { .help { grid-template-columns: minmax(0, 1fr); gap: 12px; } .articles { min-width: 0; } .toc { position: static; display: flex; flex-wrap: wrap; gap: 6px; } .toc b { width: 100%; } .toc a { background: var(--surface-2); } }

@@ -1,0 +1,96 @@
+# Throwaway dependencies for cluster tests ONLY (single replicas, emptyDir storage). In production use managed Postgres/Redis/Kafka.
+apiVersion: v1
+kind: Namespace
+metadata: { name: mobiad-deps }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: postgres, namespace: mobiad-deps }
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          env: [{ name: POSTGRES_PASSWORD, value: dev }, { name: POSTGRES_DB, value: mobiad }, { name: PGDATA, value: /var/lib/postgresql/data/pgdata }]
+          ports: [{ containerPort: 5432 }]
+          readinessProbe: { exec: { command: [pg_isready, -U, postgres, -d, mobiad] }, periodSeconds: 3 }
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres, namespace: mobiad-deps }
+spec: { selector: { app: postgres }, ports: [{ port: 5432 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: redis, namespace: mobiad-deps }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      containers:
+        - { name: redis, image: "redis:7", ports: [{ containerPort: 6379 }], readinessProbe: { exec: { command: [redis-cli, ping] }, periodSeconds: 3 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redis, namespace: mobiad-deps }
+spec: { selector: { app: redis }, ports: [{ port: 6379 }] }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: redpanda, namespace: mobiad-deps }
+spec:
+  serviceName: redpanda
+  replicas: 1
+  selector: { matchLabels: { app: redpanda } }
+  template:
+    metadata: { labels: { app: redpanda } }
+    spec:
+      containers:
+        - name: redpanda
+          image: redpandadata/redpanda:v24.1.1
+          # `rpk redpanda mode production` turns OFF the image's baked-in developer mode. Developer mode skips fsync, so ACKNOWLEDGED
+          # writes can be lost on a hard kill (found by chaos testing). Production mode needs >= 1 GiB per core. Topic auto-creation
+          # is off: the app creates topics with the intended partition count.
+          command: [sh, -c]
+          args:
+            - >-
+              rpk redpanda mode production &&
+              exec rpk redpanda start --smp 1 --memory 1G --overprovisioned --node-id 0 --check=false
+              --set redpanda.auto_create_topics_enabled=false
+              --kafka-addr PLAINTEXT://0.0.0.0:9092
+              --advertise-kafka-addr PLAINTEXT://redpanda.mobiad-deps.svc.cluster.local:9092
+          ports: [{ containerPort: 9092 }]
+          readinessProbe: { tcpSocket: { port: 9092 }, periodSeconds: 5, initialDelaySeconds: 10 }
+          volumeMounts: [{ name: data, mountPath: /var/lib/redpanda/data }]   # survives a container restart (a real deployment uses a PVC)
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redpanda, namespace: mobiad-deps }
+spec: { selector: { app: redpanda }, ports: [{ port: 9092 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mailpit, namespace: mobiad-deps }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mailpit } }
+  template:
+    metadata: { labels: { app: mailpit } }
+    spec:
+      containers:
+        - { name: mailpit, image: "axllent/mailpit:latest", ports: [{ containerPort: 1025 }, { containerPort: 8025 }] }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mailpit, namespace: mobiad-deps }
+spec: { selector: { app: mailpit }, ports: [{ name: smtp, port: 1025 }, { name: http, port: 8025 }] }

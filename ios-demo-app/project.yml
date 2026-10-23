@@ -1,0 +1,25 @@
+# Generates MobiAdDemo.xcodeproj:  brew install xcodegen && cd ios-demo-app && xcodegen && open MobiAdDemo.xcodeproj
+# (an .xcodeproj is machine-written, so the repo keeps this small spec instead)
+name: MobiAdDemo
+options:
+  bundleIdPrefix: io.mobiad
+  deploymentTarget: { iOS: "15.0" }
+packages:
+  MobiAd:
+    path: ../sdk/ios
+targets:
+  MobiAdDemo:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: MobiAd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.mobiad.demo
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        # the demo talks to a local http server; a real app uses https only
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: YES
+        SWIFT_VERSION: "5.9"

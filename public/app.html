@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MobiAd Dashboard</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%235b3df5'/%3E%3Cpath d='M8 22V10l8 8 8-8v12' stroke='%23fff' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body class="app anon">
+<div class="shell">
+  <aside class="side" id="side" aria-label="Sidebar">
+    <a class="logo" href="/" aria-label="MobiAd home"><svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b3df5"/><stop offset="1" stop-color="#00c2b8"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#lg)"/><path d="M8 22V10l8 8 8-8v12" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>MobiAd</a>
+    <nav id="topnav" aria-label="Dashboard"></nav>
+    <div class="spacer"></div>
+    <div id="sidefoot"></div>
+  </aside>
+  <div class="main-col">
+    <header class="topbar">
+      <button class="menu-btn" id="menubtn" type="button" aria-label="Open navigation" aria-controls="side" aria-expanded="false"></button>
+      <h1 id="pagetitle">Dashboard</h1>
+      <div id="topactions"></div>
+    </header>
+    <main id="root" aria-live="polite"></main>
+  </div>
+</div>
+<div class="scrim" id="scrim"></div>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

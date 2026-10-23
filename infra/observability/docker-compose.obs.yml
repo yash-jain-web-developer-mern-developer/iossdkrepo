@@ -1,0 +1,21 @@
+# Local Prometheus + Grafana. The app runs on the host at :8097 with METRICS_TOKEN set to the contents of ./metrics_token.
+#   echo -n "$METRICS_TOKEN" > infra/observability/metrics_token ; docker compose -f infra/observability/docker-compose.obs.yml up -d
+#   Prometheus http://localhost:59090  ·  Grafana http://localhost:53000 (admin / admin on first login)
+name: mobiad-obs
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./metrics_token:/etc/prometheus/metrics_token:ro
+    ports: ["59090:9090"]
+  grafana:
+    image: grafana/grafana:latest
+    depends_on: [prometheus]
+    environment: { GF_SECURITY_ADMIN_PASSWORD: admin, GF_USERS_ALLOW_SIGN_UP: "false" }
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["53000:3000"]

@@ -1,0 +1,38 @@
+# Default-deny, then allow only what MobiAd needs. Ingress: from the ingress controller and the monitoring namespace.
+# Egress: DNS and the dependency ports. In production tighten the egress rules to your datastore CIDRs/namespaces.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: mobiad
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mobiad-traffic
+  namespace: mobiad
+spec:
+  podSelector: { matchLabels: { app: mobiad } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: ingress-nginx } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: monitoring } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+      ports: [{ protocol: TCP, port: 8080 }]
+  egress:
+    - to: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } } }]   # DNS
+      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+    - ports:                                                                                       # datastores, SMTP, Stripe (HTTPS)
+        - { protocol: TCP, port: 5432 }
+        - { protocol: TCP, port: 6379 }
+        - { protocol: TCP, port: 6380 }
+        - { protocol: TCP, port: 9092 }
+        - { protocol: TCP, port: 9093 }
+        - { protocol: TCP, port: 587 }
+        - { protocol: TCP, port: 465 }
+        - { protocol: TCP, port: 1025 }
+        - { protocol: TCP, port: 443 }

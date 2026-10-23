@@ -1,0 +1,105 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ matrix.node }}", cache: npm }
+      - run: npm ci
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+
+  integration:
+    name: integration (real Postgres, Redis, Kafka, SMTP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Start real dependencies
+        run: |
+          docker compose -f infra/docker-compose.deps.yml up -d
+          for _ in $(seq 1 40); do docker exec mobiad-deps-postgres-1 pg_isready -U postgres -d mobiad && break; sleep 3; done
+          for _ in $(seq 1 40); do curl -sf http://localhost:58025/api/v1/info >/dev/null && break; sleep 2; done
+          docker run -d --name stripe-mock -p 12111:12111 stripe/stripe-mock:latest
+          for _ in $(seq 1 20); do curl -s -o /dev/null http://localhost:12111/ && break; sleep 1; done
+      - name: Run integration tests
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgres://postgres:dev@localhost:55432/mobiad
+          REDIS_URL: redis://localhost:56379
+          KAFKA_BROKERS: localhost:59092
+          SMTP_URL: smtp://localhost:51025
+          MAILPIT_API: http://localhost:58025
+          STRIPE_MOCK_URL: http://localhost:12111
+        run: npm run test:integration
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.deps.yml logs --tail=100
+
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Secret scan (gitleaks)
+        run: docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks:latest detect --no-git --source /repo --redact --no-banner --exit-code 1
+      - name: Static analysis (semgrep)
+        run: docker run --rm -v "$PWD:/src:ro" semgrep/semgrep:latest semgrep scan --config p/javascript --config p/nodejs --config p/security-audit --config p/owasp-top-ten --metrics=off --error /src/src /src/public /src/scripts /src/sdk
+      - uses: github/codeql-action/init@v3
+        with: { languages: javascript-typescript }
+      - uses: github/codeql-action/analyze@v3
+      - name: Build image
+        run: docker build -t mobiad:ci .
+      - name: Image vulnerability scan (trivy)
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 --scanners vuln,secret mobiad:ci
+      - name: SBOM
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --format cyclonedx --output /dev/stdout mobiad:ci > sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with: { name: sbom, path: sbom.cdx.json }
+
+  config-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: OpenAPI lint
+        run: docker run --rm -v "$PWD/docs:/spec:ro" redocly/cli:latest lint /spec/openapi.yaml --skip-rule=operation-4xx-response --skip-rule=operation-operationId --skip-rule=no-unused-components --skip-rule=security-defined --skip-rule=info-license --skip-rule=operation-description
+      - name: Strict YAML parse of the OpenAPI spec (ZAP and other tools use strict parsers; the linter is lenient)
+        run: pip install -q pyyaml && python3 -c "import yaml; yaml.safe_load(open('docs/openapi.yaml'))"
+      - name: Alert rules + unit tests (promtool)
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/infra/observability:/obs:ro" prom/prometheus:latest check rules /obs/alerts.yml
+          docker run --rm --entrypoint promtool -v "$PWD/infra/observability:/obs:ro" -w /obs prom/prometheus:latest test rules alerts.test.yml
+      - name: Kubernetes manifests (render with kustomize, validate strictly)
+        run: |
+          bash infra/k8s/overlays/k3s-test/make-secrets.sh   # the test overlay reads generated (uncommitted) secrets
+          for dir in infra/k8s/base infra/k8s/overlays/k3s-test; do
+            kubectl kustomize "$dir" | docker run --rm -i ghcr.io/yannh/kubeconform:latest -strict -summary -kubernetes-version 1.30.0 -
+          done
+          docker run --rm -v "$PWD/infra/k8s/base:/k:ro" ghcr.io/yannh/kubeconform:latest -strict -summary -kubernetes-version 1.30.0 /k/ingress.yaml /k/migrate-job.yaml
+      - name: Workflow lint
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:latest -color
+
+  image:
+    needs: [test, integration, security, config-validation]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t mobiad:${{ github.sha }} .

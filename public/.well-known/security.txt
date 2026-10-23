@@ -1,0 +1,5 @@
+# RFC 9116. Replace the placeholder contact with a monitored mailbox BEFORE launch and keep Expires in the future.
+Contact: mailto:security@example.com
+Expires: 2027-10-01T00:00:00.000Z
+Preferred-Languages: en
+Policy: https://ads.example.com/security-policy

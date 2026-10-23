@@ -1,0 +1,20 @@
+# Real dependencies for host-run integration tests (the app itself runs on the host):
+#   docker compose -f infra/docker-compose.deps.yml up -d
+#   DATABASE_URL=postgres://postgres:dev@localhost:55432/mobiad REDIS_URL=redis://localhost:56379 \
+#   KAFKA_BROKERS=localhost:59092 SMTP_URL=smtp://localhost:51025 MAILPIT_API=http://localhost:58025 npm run test:integration
+name: mobiad-deps
+services:
+  postgres:
+    image: postgres:16
+    environment: { POSTGRES_PASSWORD: dev, POSTGRES_DB: mobiad }
+    ports: ["55432:5432"]
+  redis:
+    image: redis:7
+    ports: ["56379:6379"]
+  redpanda:
+    image: redpandadata/redpanda:v24.1.1
+    command: redpanda start --smp 1 --memory 768M --overprovisioned --node-id 0 --mode dev-container --kafka-addr PLAINTEXT://0.0.0.0:59092 --advertise-kafka-addr PLAINTEXT://localhost:59092
+    ports: ["59092:59092"]
+  mailpit:                       # a real SMTP server that captures mail; inspect via its HTTP API
+    image: axllent/mailpit:latest
+    ports: ["51025:1025", "58025:8025"]

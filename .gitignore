@@ -1,0 +1,11 @@
+node_modules
+data.json
+*.log
+.env
+android-demo-app/build/
+android-demo-app/.gradle/
+android-demo-app/app/build/
+sdk/android/build/
+sdk/android/.gradle/
+*.tmp
+*.tmp.cjs

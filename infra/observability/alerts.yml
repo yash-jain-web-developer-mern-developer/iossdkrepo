@@ -1,0 +1,173 @@
+# Prometheus alert rules for MobiAd. Validate: promtool check rules alerts.yml ; unit tests: promtool test rules alerts.test.yml
+# Severity: critical = page now (money/data at risk or outage) · warning = look within hours · info = awareness.
+groups:
+  - name: mobiad-availability
+    rules:
+      - alert: MobiAdDown
+        expr: up{job="mobiad"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "MobiAd instance {{ $labels.instance }} is down"
+          runbook: "docs/RUNBOOK.md#deploy"
+      - alert: HighServerErrorRate
+        expr: |
+          sum(rate(mobiad_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(mobiad_http_requests_total[5m])), 1) > 0.02
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "More than 2% of requests are failing with 5xx ({{ $value | humanizePercentage }})"
+      - alert: AdServingLatencyHigh
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(mobiad_http_duration_seconds_bucket{route="/v1/ad"}[5m]))) > 0.1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "p99 ad-request latency is {{ $value | humanizeDuration }} (target < 100 ms)"
+          runbook: "docs/RUNBOOK.md#alerts-to-configure-from-metrics"
+      - alert: EventLoopLagHigh
+        expr: max(mobiad_eventloop_lag_p99_seconds) > 0.25
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Node event loop lag p99 is {{ $value }}s: a pod is CPU saturated; scale out" }
+
+  - name: mobiad-billing-integrity
+    rules:
+      - alert: LedgerEventsDropped
+        expr: increase(mobiad_ledger_dropped_total[5m]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "Billing events were DROPPED (queue full). Data loss: reconcile from tracker logs now"
+          runbook: "docs/RUNBOOK.md#reconciliation"
+      - alert: LedgerBacklogGrowing
+        expr: max(mobiad_ledger_queue) > 5000
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "Ledger queue is {{ $value }} events: Postgres is slow or down (events at risk if a pod dies without Kafka)" }
+      - alert: LedgerWriteFailures
+        expr: increase(mobiad_ledger_failed_total[10m]) > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Ledger writes keep failing (retrying): check Postgres" }
+      - alert: CampaignCounterDrift
+        expr: increase(mobiad_counter_update_failures_total[15m]) > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "Campaign counters failed to update; run scripts/reconcile.js (ledger is intact)" }
+
+  - name: mobiad-event-pipeline
+    rules:
+      - alert: KafkaFallbackActive
+        expr: increase(mobiad_kafka_fallback_total[5m]) > 0
+        labels: { severity: warning }
+        annotations: { summary: "Trackers are falling back to in-memory queues: Kafka is unavailable; durability is reduced until it recovers" }
+      - alert: KafkaDeadLetters
+        expr: increase(mobiad_kafka_dlq_total[15m]) > 0
+        labels: { severity: critical }
+        annotations: { summary: "Events were dead-lettered as malformed (fraud/billing records not reaching the ledger). Inspect mobiad.events.dlq" }
+      - alert: KafkaConsumerErrors
+        expr: increase(mobiad_kafka_consumer_errors_total[10m]) > 20
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Ledger consumer keeps failing to write to Postgres (events remain safe in Kafka)" }
+      - alert: KafkaLedgerConsumerDown
+        expr: sum(mobiad_kafka_consumer_up) == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "No pod is draining Kafka into the ledger. Events accumulate safely in Kafka but billing and reports go stale" }
+      - alert: KafkaLedgerConsumerDegraded
+        expr: min(mobiad_kafka_consumer_up) == 0 and sum(mobiad_kafka_consumer_up) > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "At least one pod's ledger consumer has been down for 10 minutes (the supervisor keeps rebuilding it)" }
+      - alert: KafkaLedgerConsumerFlapping
+        expr: sum(increase(mobiad_kafka_consumer_restarts_total[15m])) > 6
+        labels: { severity: warning }
+        annotations: { summary: "The ledger consumer keeps crashing and being rebuilt: check broker health and consumer-group rebalances" }
+      - alert: KafkaConsumerStalled
+        expr: |
+          sum(rate(mobiad_kafka_produced_total[10m])) > 1 and sum(rate(mobiad_kafka_consumed_total[10m])) == 0
+        for: 10m
+        labels: { severity: critical }
+        annotations: { summary: "Events are being produced but none consumed: the ledger is not being written" }
+
+  - name: mobiad-dependencies
+    rules:
+      - alert: RedisDegraded
+        expr: max(mobiad_redis_degraded) == 1
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "Redis is unavailable; running on local fallbacks (rate limits/dedupe per pod, budget overshoot possible)" }
+      - alert: DatabasePoolSaturated
+        expr: max(mobiad_db_pool_waiting) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Requests are waiting for a Postgres connection: raise PG_POOL_MAX or investigate slow queries" }
+      - alert: PodMemoryHigh
+        expr: max by (instance) (mobiad_process_resident_memory_bytes) > 450e6
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.instance }} uses {{ $value | humanize1024 }}B (limit 512Mi): possible leak" }
+
+  - name: mobiad-traffic-quality
+    rules:
+      - alert: FillRateLow
+        expr: |
+          sum(rate(mobiad_ad_requests_total{filled="true"}[15m])) / clamp_min(sum(rate(mobiad_ad_requests_total[15m])), 0.001) < 0.2
+          and sum(rate(mobiad_ad_requests_total[15m])) > 1
+        for: 30m
+        labels: { severity: warning }
+        annotations: { summary: "Fill rate is {{ $value | humanizePercentage }}: budgets exhausted, campaigns stuck in review, or targeting too narrow" }
+      - alert: InvalidClickRateHigh
+        expr: |
+          sum(rate(mobiad_invalid_clicks_total[15m]))
+            / clamp_min(sum(rate(mobiad_invalid_clicks_total[15m])) + sum(rate(mobiad_tracking_total{kind="c",result="counted"}[15m])), 0.001) > 0.3
+          and sum(rate(mobiad_invalid_clicks_total[15m])) > 0.1
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "{{ $value | humanizePercentage }} of clicks are invalid: likely click fraud or a broken SDK integration" }
+      - alert: ForgedTokenSpike
+        expr: |
+          sum(rate(mobiad_tracking_total{result="invalid"}[10m])) / clamp_min(sum(rate(mobiad_tracking_total[10m])), 0.001) > 0.2
+          and sum(rate(mobiad_tracking_total{result="invalid"}[10m])) > 0.5
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Many tracking calls carry invalid tokens: attack, or the signing secret differs between pods" }
+
+  - name: mobiad-operations
+    rules:
+      - alert: ReviewQueueBacklog
+        expr: max(mobiad_campaigns_pending_review) > 20
+        for: 1h
+        labels: { severity: warning }
+        annotations: { summary: "{{ $value }} campaigns are waiting for review: advertisers are blocked" }
+      - alert: FlaggedAppsNeedReview
+        expr: max(mobiad_apps_flagged) > 0
+        for: 24h
+        labels: { severity: info }
+        annotations: { summary: "Flagged apps have been waiting more than a day: their publishers' earnings are held" }
+      - alert: PayoutsWaiting
+        expr: max(mobiad_payouts_pending) > 0
+        for: 72h
+        labels: { severity: info }
+        annotations: { summary: "Publisher payout requests have waited more than 3 days" }
+
+  - name: mobiad-integrations
+    rules:
+      - alert: DemandPartnerFailing
+        expr: |
+          sum by (partner) (rate(mobiad_partner_requests_total{result=~"timeout|error|http_error|bad_response|breaker_open"}[10m]))
+            / clamp_min(sum by (partner) (rate(mobiad_partner_requests_total{partner!="none"}[10m])), 0.001) > 0.5
+          and sum by (partner) (rate(mobiad_partner_requests_total{partner!="none"}[10m])) > 0.5
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "Demand partner {{ $labels.partner }} fails {{ $value | humanizePercentage }} of requests: revenue is being lost, and ad latency may be affected until its circuit breaker opens" }
+      - alert: WebhookDeliveriesFailing
+        expr: |
+          sum(rate(mobiad_webhook_deliveries_total{result="error"}[30m]))
+            / clamp_min(sum(rate(mobiad_webhook_deliveries_total[30m])), 0.001) > 0.5
+          and sum(rate(mobiad_webhook_deliveries_total[30m])) > 0.02
+        for: 30m
+        labels: { severity: info }
+        annotations: { summary: "More than half of webhook deliveries fail: customers' endpoints are down, or an outbound network problem" }

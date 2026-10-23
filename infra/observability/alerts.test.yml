@@ -1,0 +1,152 @@
+# promtool unit tests: feed synthetic time series and assert which alerts fire (and which must NOT).
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+tests:
+  - name: instance down fires after 2m, healthy instance does not
+    interval: 1m
+    input_series:
+      - { series: 'up{job="mobiad", instance="a"}', values: '1 1 0 0 0 0 0' }
+      - { series: 'up{job="mobiad", instance="b"}', values: '1 1 1 1 1 1 1' }
+    alert_rule_test:
+      - { eval_time: 3m, alertname: MobiAdDown, exp_alerts: [] }       # only 1m down so far
+      - eval_time: 6m
+        alertname: MobiAdDown
+        exp_alerts:
+          - { exp_labels: { severity: critical, job: mobiad, instance: a }, exp_annotations: { summary: "MobiAd instance a is down", runbook: "docs/RUNBOOK.md#deploy" } }
+
+  - name: dropped billing events page immediately
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_ledger_dropped_total{instance="a"}', values: '0 0 0 5 5 5' }
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: LedgerEventsDropped
+        exp_alerts:
+          - { exp_labels: { severity: critical, instance: a }, exp_annotations: { summary: "Billing events were DROPPED (queue full). Data loss: reconcile from tracker logs now", runbook: "docs/RUNBOOK.md#reconciliation" } }
+      - { eval_time: 12m, alertname: LedgerEventsDropped, exp_alerts: [] } # resolved once nothing new is dropped
+
+  - name: 5xx ratio above 2 percent fires, 1 percent does not
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_http_requests_total{status="200", route="x"}', values: '0+97x15' }
+      - { series: 'mobiad_http_requests_total{status="500", route="x"}', values: '0+3x15' }
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HighServerErrorRate
+        exp_alerts:
+          - { exp_labels: { severity: critical }, exp_annotations: { summary: "More than 2% of requests are failing with 5xx (3%)" } }
+  - name: one percent errors are tolerated
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_http_requests_total{status="200", route="x"}', values: '0+99x15' }
+      - { series: 'mobiad_http_requests_total{status="500", route="x"}', values: '0+1x15' }
+    alert_rule_test:
+      - { eval_time: 12m, alertname: HighServerErrorRate, exp_alerts: [] }
+
+  - name: kafka dead letters and fallback
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_kafka_dlq_total{instance="a"}', values: '0 0 0 2 2 2 2 2' }
+      - { series: 'mobiad_kafka_fallback_total{instance="a"}', values: '0 0 0 0 0 0 0 0' }
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KafkaDeadLetters
+        exp_alerts:
+          - { exp_labels: { severity: critical, instance: a }, exp_annotations: { summary: "Events were dead-lettered as malformed (fraud/billing records not reaching the ledger). Inspect mobiad.events.dlq" } }
+      - { eval_time: 5m, alertname: KafkaFallbackActive, exp_alerts: [] }
+
+  - name: consumer stall requires production without consumption
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_kafka_produced_total{instance="a"}', values: '0+600x30' }
+      - { series: 'mobiad_kafka_consumed_total{instance="a"}', values: '0+600x5 3000x25' }
+    alert_rule_test:
+      - { eval_time: 4m, alertname: KafkaConsumerStalled, exp_alerts: [] }   # still consuming
+      - eval_time: 28m
+        alertname: KafkaConsumerStalled
+        exp_alerts:
+          - { exp_labels: { severity: critical }, exp_annotations: { summary: "Events are being produced but none consumed: the ledger is not being written" } }
+
+  - name: redis degraded and ledger backlog
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_redis_degraded{instance="a"}', values: '0 1 1 1 1 1' }
+      - { series: 'mobiad_ledger_queue{instance="a"}', values: '10 6000 6000 6000 6000 6000 6000 6000' }
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RedisDegraded
+        exp_alerts:
+          - { exp_labels: { severity: warning }, exp_annotations: { summary: "Redis is unavailable; running on local fallbacks (rate limits/dedupe per pod, budget overshoot possible)" } }
+      - eval_time: 7m
+        alertname: LedgerBacklogGrowing
+        exp_alerts:
+          - { exp_labels: { severity: critical }, exp_annotations: { summary: "Ledger queue is 6000 events: Postgres is slow or down (events at risk if a pod dies without Kafka)" } }
+
+  - name: invalid click share needs both a high ratio and real volume
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_invalid_clicks_total{reason="too_fast"}', values: '0+10x30' }
+      - { series: 'mobiad_tracking_total{kind="c", result="counted"}', values: '0+10x30' }
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: InvalidClickRateHigh
+        exp_alerts:
+          - { exp_labels: { severity: warning }, exp_annotations: { summary: "50% of clicks are invalid: likely click fraud or a broken SDK integration" } }
+  - name: a handful of invalid clicks is noise
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_invalid_clicks_total{reason="too_fast"}', values: '0+1x30' }
+      - { series: 'mobiad_tracking_total{kind="c", result="counted"}', values: '0+1x30' }
+    alert_rule_test:
+      - { eval_time: 25m, alertname: InvalidClickRateHigh, exp_alerts: [] }
+
+  - name: fleet-wide consumer outage pages, a single pod down does not
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_kafka_consumer_up{instance="a"}', values: '1 1 0 0 0 0 0 0' }
+      - { series: 'mobiad_kafka_consumer_up{instance="b"}', values: '1 1 0 0 0 0 0 0' }
+      - { series: 'mobiad_kafka_consumer_up{instance="c"}', values: '1 1 1 1 1 1 1 1' }
+    alert_rule_test:
+      - { eval_time: 6m, alertname: KafkaLedgerConsumerDown, exp_alerts: [] }       # pod c still consuming: not a fleet outage
+  - name: all consumers down
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_kafka_consumer_up{instance="a"}', values: '1 1 0 0 0 0 0 0' }
+      - { series: 'mobiad_kafka_consumer_up{instance="b"}', values: '1 1 0 0 0 0 0 0' }
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: KafkaLedgerConsumerDown
+        exp_alerts:
+          - { exp_labels: { severity: critical }, exp_annotations: { summary: "No pod is draining Kafka into the ledger. Events accumulate safely in Kafka but billing and reports go stale" } }
+      - { eval_time: 3m, alertname: KafkaLedgerConsumerDown, exp_alerts: [] }       # not yet 2 minutes
+
+  - name: partner failing
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_partner_requests_total{partner="prt_a", result="timeout"}', values: '0+60x40' }
+      - { series: 'mobiad_partner_requests_total{partner="prt_a", result="bid"}', values: '0+6x40' }
+      - { series: 'mobiad_partner_requests_total{partner="prt_b", result="bid"}', values: '0+8x40' }
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DemandPartnerFailing
+        exp_alerts:
+          - { exp_labels: { severity: warning, partner: prt_a }, exp_annotations: { summary: "Demand partner prt_a fails 90.91% of requests: revenue is being lost, and ad latency may be affected until its circuit breaker opens" } }
+  - name: healthy partners and webhooks stay quiet
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_partner_requests_total{partner="prt_b", result="bid"}', values: '0+8x40' }
+      - { series: 'mobiad_partner_requests_total{partner="prt_b", result="nobid"}', values: '0+2x40' }
+      - { series: 'mobiad_webhook_deliveries_total{result="delivered"}', values: '0+1x80' }
+    alert_rule_test:
+      - { eval_time: 30m, alertname: DemandPartnerFailing, exp_alerts: [] }
+      - { eval_time: 60m, alertname: WebhookDeliveriesFailing, exp_alerts: [] }
+  - name: webhook endpoints down
+    interval: 1m
+    input_series:
+      - { series: 'mobiad_webhook_deliveries_total{result="error"}', values: '0+3x80' }
+      - { series: 'mobiad_webhook_deliveries_total{result="delivered"}', values: '0+0x80' }
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: WebhookDeliveriesFailing
+        exp_alerts:
+          - { exp_labels: { severity: info }, exp_annotations: { summary: "More than half of webhook deliveries fail: customers' endpoints are down, or an outbound network problem" } }

@@ -1,0 +1,15 @@
+# Prometheus scrape config. In Kubernetes use the pod annotations in infra/k8s/mobiad.yaml with kubernetes_sd_configs;
+# for the local observability stack the app runs on the host (see docker-compose.obs.yml).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+rule_files:
+  - /etc/prometheus/alerts.yml
+scrape_configs:
+  - job_name: mobiad
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token   # same value as METRICS_TOKEN
+    static_configs:
+      - targets: ['host.docker.internal:8097']

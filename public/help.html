@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Help center – MobiAd</title>
+<meta name="description" content="Guides for advertisers, publishers and developers using MobiAd.">
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/site.css">
+<link rel="stylesheet" href="/help.css">
+<script src="/site.js" defer></script>
+</head>
+<body>
+<header class="site-nav"><div class="wrap"><a class="logo" href="/">MobiAd</a><nav class="menu always"><a href="/">Home</a><a class="btn small" href="/app">Dashboard</a></nav><div class="menu-tools"><button class="theme-btn" id="theme" type="button" aria-label="Toggle dark mode">◐</button></div></div></header>
+<div class="wrap help">
+  <aside class="toc" aria-label="Contents">
+    <b>Guides</b>
+    <a href="#start-advertiser">Start advertising</a><a href="#start-publisher">Start monetising</a><a href="#formats">Ad formats</a><a href="#targeting">Targeting</a><a href="#creatives">Creatives and A/B tests</a>
+    <a href="#attribution">Conversions and CPA</a><a href="#rewarded">Rewarded video</a><a href="#auction">The unified auction</a><a href="#reports">Reports</a><a href="#billing">Billing, invoices, credit notes</a>
+    <a href="#payouts">Payouts</a><a href="#webhooks">Webhooks</a><a href="#sdk">SDKs and test mode</a><a href="#privacy">Privacy and consent</a><a href="#trouble">Troubleshooting</a>
+  </aside>
+  <main class="articles" id="main">
+    <h1>Help center</h1>
+    <p class="lead">Practical guides, written to match what the platform actually does today.</p>
+
+    <section id="start-advertiser"><h2>Start advertising</h2>
+      <ol><li>Create an advertiser account and verify your email.</li><li>Open <b>Wallet</b> and add funds. A campaign's budget is reserved when you submit it.</li><li>Open <b>Campaigns → New campaign</b> and follow the four steps: basics, creative, budget, targeting. The preview updates as you type.</li><li>New campaigns are screened automatically and usually reviewed by a person before they serve. You will see the status in the campaign list, and can subscribe to a webhook.</li></ol></section>
+
+    <section id="start-publisher"><h2>Start monetising an app</h2>
+      <ol><li>Create a publisher account, then <b>Apps → Add app</b>. Copy the App ID.</li><li>Add the SDK (JavaScript, Kotlin or Swift) and request ads with your App ID. Use test mode first.</li><li>Set a floor eCPM, block categories you do not want, and tick <i>child-directed</i> if the app targets children.</li><li>Under <b>Earnings and payouts</b>, complete your payout details and identity/tax status so payouts can be approved.</li><li>Add the line from <b>Apps → app-ads.txt</b> to your developer website's app-ads.txt file.</li></ol></section>
+
+    <section id="formats"><h2>Ad formats</h2>
+      <p><b>Banner</b>, <b>interstitial</b>, <b>native</b> (headline, body, icon, image, sponsor, rating, button), <b>video</b> (https, up to 60 seconds, completion tracking), <b>playable</b> (sandboxed HTML5, always manually reviewed) and <b>rewarded</b> (video with a verified reward). Render playable and partner markup only inside a sandboxed iframe or WebView without same-origin access.</p></section>
+
+    <section id="targeting"><h2>Targeting</h2>
+      <p>Country, platform, category and child-safety, plus: languages, phone or tablet, minimum OS version, Wi-Fi or cellular, hours of the day (UTC), and per-campaign app allow and block lists. A rule you set needs the matching signal in the ad request: a request that does not send the device type never matches a "phones only" campaign.</p></section>
+
+    <section id="creatives"><h2>Creatives and A/B tests</h2>
+      <p>A campaign can carry up to five creatives. MobiAd rotates them with Thompson sampling on click-through rate: better creatives win more traffic, new ones still get tested. See the <b>Reports → Breakdown → Creative</b> view. Adding a creative to a live campaign sends it back through review.</p></section>
+
+    <section id="attribution"><h2>Conversions and CPA</h2>
+      <p>Every accepted click opens your landing URL with <code>mobiad_click_id</code>. When the user converts, your server calls <code>POST /v1/conversion</code> with that id, the event name and an optional value, using a write-scope API key. Last-click attribution applies inside the campaign's window (1 to 30 days). Repeats are never double-counted. With CPA pricing, only the campaign's conversion event is billed, at your bid.</p></section>
+
+    <section id="rewarded"><h2>Rewarded video</h2>
+      <p>Request <code>format: "rewarded"</code> and pass your own <code>userId</code>. When playback finishes (and a real impression was seen), MobiAd POSTs a signed callback to your server:</p>
+<pre><code>POST https://your-server.example/mobiad-reward
+X-MobiAd-Signature: sha256=&lt;HMAC-SHA256(secret, raw body)&gt;
+{ "event": "reward", "appId": "app_…", "userId": "player-42", "amount": 25, "item": "coins", "transactionId": "…", "timestamp": 1760000000000 }</code></pre>
+      <p>Verify the signature, de-duplicate on <code>transactionId</code>, then grant the reward. Never grant it from the client.</p></section>
+
+    <section id="auction"><h2>The unified auction</h2>
+      <p>MobiAd's own campaigns and approved external demand partners (OpenRTB) compete in one second-price auction. The winner pays just above the best competing bid, never above its own bid, and never below your floor. Partner ads arrive as sandboxed markup (HTML or VAST) and earn you the same revenue share; they are not billed to MobiAd advertisers. Child-directed apps only receive partners approved for children.</p></section>
+
+    <section id="reports"><h2>Reports</h2>
+      <p>The overview chart shows the last 14 days. <b>Reports</b> has daily performance with CSV download and a breakdown by campaign, creative, app, placement, country or format (depending on your role). Publishers never see advertiser spend.</p></section>
+
+    <section id="billing"><h2>Billing, invoices and credit notes</h2>
+      <p>Your wallet is calculated from an append-only ledger. After a month closes you can generate its invoice under <b>Wallet → Invoices</b>; invoices are net of tax and tax invoices are not provided. Credit notes issued by support appear below your invoices and add to your wallet.</p></section>
+
+    <section id="payouts"><h2>Payouts</h2>
+      <p>Save your payout details (name, country, method and a payout reference: never full account numbers) and submit identity and tax status for review. Payouts move from requested to approved to paid; the paid step records the external bank or PayPal transaction id. MobiAd does not store identity documents or tax IDs.</p></section>
+
+    <section id="webhooks"><h2>Webhooks</h2>
+      <p>Subscribe to events such as <code>campaign.approved</code>, <code>payout.paid</code> or <code>wallet.credited</code> under <b>Developers → Webhooks</b>. Bodies are signed: <code>X-MobiAd-Signature: t=&lt;unix&gt;,v1=&lt;HMAC-SHA256(secret, "&lt;t&gt;.&lt;raw body&gt;")&gt;</code>. Reject old timestamps and de-duplicate on the event id. Failed deliveries retry after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours.</p></section>
+
+    <section id="sdk"><h2>SDKs and test mode</h2>
+      <p>Pass <code>test: true</code> to receive a canned ad for any format without an auction, billing or tracking: use it to check your rendering. The SDKs enforce good behaviour for you: one impression per ad, no instant clicks, no device ID without consent. The JavaScript SDK can report the impression only once the ad is viewable (50% visible for one second).</p></section>
+
+    <section id="privacy"><h2>Privacy and consent</h2>
+      <p>Pass the user's consent signals with each request. For GDPR, send the TCF v2 consent string: a device identifier is only used when it grants purpose 1, and, if configured, lists MobiAd as a vendor. COPPA, limit-ad-tracking and US-privacy opt-outs disable the identifier entirely. Identifiers are hashed per app and per day and used only for frequency caps.</p></section>
+
+    <section id="trouble"><h2>Troubleshooting</h2>
+      <ul><li><b>No fill (HTTP 204)</b>: no approved campaign matches your format, targeting or floor. Try test mode, lower the floor, or check blocked categories.</li><li><b>Campaign not serving</b>: it may still be in review, paused, out of budget, or restricted by targeting signals your app does not send.</li><li><b>Reward callback not arriving</b>: check the callback URL is public https and answers 2xx; MobiAd retries 5xx responses.</li><li><b>Payout blocked</b>: complete payout details and get identity and tax status verified.</li></ul></section>
+  </main>
+</div>
+<footer class="site-footer"><div class="wrap cols"><div><a class="logo" href="/">MobiAd</a><p>© 2026 MobiAd. All rights reserved.</p></div><nav aria-label="Footer"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/app">Dashboard</a></nav></div></footer>
+</body>
+</html>

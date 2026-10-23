@@ -1,0 +1,30 @@
+# Daily data-retention purge (one-time tokens, old audit entries). Never touches the billing ledger.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mobiad-retention
+  namespace: mobiad
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: mobiad
+          automountServiceAccountToken: false
+          securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+          containers:
+            - name: retention
+              image: ghcr.io/your-org/mobiad:latest
+              imagePullPolicy: IfNotPresent
+              command: ["node", "scripts/retention.js"]
+              envFrom:
+                - configMapRef: { name: mobiad-config }
+                - secretRef: { name: mobiad-secrets }
+              resources: { requests: { cpu: 50m, memory: 96Mi }, limits: { cpu: 300m, memory: 192Mi } }
+              securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }

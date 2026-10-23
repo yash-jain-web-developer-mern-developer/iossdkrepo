@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: mobiad
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+  - retention-cronjob.yaml
+images:
+  - name: ghcr.io/your-org/mobiad
+    newName: ghcr.io/your-org/mobiad
+    newTag: latest          # set per release; prefer a digest

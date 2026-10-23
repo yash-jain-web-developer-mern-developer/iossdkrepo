@@ -1,0 +1,27 @@
+# Database migration. Run it BEFORE rolling out a new version:  kubectl apply -f migrate-job.yaml && kubectl -n mobiad wait --for=condition=complete job/mobiad-migrate
+# (Jobs are immutable: delete the previous one first, or give each release a unique name.) Migrations are forward-only and
+# serialized by a Postgres advisory lock, so a stray concurrent run is safe.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mobiad-migrate
+  namespace: mobiad
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: mobiad
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: migrate
+          image: ghcr.io/your-org/mobiad:latest
+          imagePullPolicy: IfNotPresent
+          command: ["node", "scripts/migrate.js"]
+          envFrom:
+            - configMapRef: { name: mobiad-config }
+            - secretRef: { name: mobiad-secrets }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 500m, memory: 256Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
