@@ -15,7 +15,7 @@ jobs:
       matrix:
         node: [20, 22]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: "${{ matrix.node }}", cache: npm }
       - run: npm ci
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
@@ -58,7 +58,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Secret scan (gitleaks)
         run: docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks:latest detect --no-git --source /repo --redact --no-banner --exit-code 1
       - name: Static analysis (semgrep)
@@ -78,7 +78,7 @@ jobs:
   config-validation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: OpenAPI lint
         run: docker run --rm -v "$PWD/docs:/spec:ro" redocly/cli:latest lint /spec/openapi.yaml --skip-rule=operation-4xx-response --skip-rule=operation-operationId --skip-rule=no-unused-components --skip-rule=security-defined --skip-rule=info-license --skip-rule=operation-description
       - name: Strict YAML parse of the OpenAPI spec (ZAP and other tools use strict parsers; the linter is lenient)
@@ -101,5 +101,5 @@ jobs:
     needs: [test, integration, security, config-validation]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t mobiad:${{ github.sha }} .
