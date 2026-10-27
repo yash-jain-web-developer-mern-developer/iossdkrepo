@@ -47,7 +47,12 @@ jobs:
           SMTP_URL: smtp://localhost:51025
           MAILPIT_API: http://localhost:58025
           STRIPE_MOCK_URL: http://localhost:12111
-        run: npm run test:integration
+        run: |
+          set +e
+          npm run test:integration > integration.log 2>&1; rc=$?
+          tail -n 30 integration.log
+          if [ $rc -ne 0 ]; then echo "::error title=integration tests::$( (grep -E "^not ok|error:|expected|actual|Error|ECONN|refused" integration.log | head -40) | awk '{printf "%s%%0A", $0}')"; fi
+          exit $rc
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f infra/docker-compose.deps.yml logs --tail=100
@@ -80,7 +85,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: OpenAPI lint
-        run: docker run --rm -v "$PWD/docs:/spec:ro" redocly/cli:latest lint /spec/openapi.yaml --skip-rule=operation-4xx-response --skip-rule=operation-operationId --skip-rule=no-unused-components --skip-rule=security-defined --skip-rule=info-license --skip-rule=operation-description
+        run: |
+          set +e
+          docker run --rm -v "$PWD/docs:/spec:ro" redocly/cli:latest lint /spec/openapi.yaml --skip-rule=operation-4xx-response --skip-rule=operation-operationId --skip-rule=no-unused-components --skip-rule=security-defined --skip-rule=info-license --skip-rule=operation-description > lint.log 2>&1; rc=$?
+          cat lint.log
+          if [ $rc -ne 0 ]; then echo "::error title=OpenAPI lint::$(grep -v "^$" lint.log | head -60 | awk '{printf "%s%%0A", $0}')"; fi
+          exit $rc
       - name: Strict YAML parse of the OpenAPI spec (ZAP and other tools use strict parsers; the linter is lenient)
         run: pip install -q pyyaml && python3 -c "import yaml; yaml.safe_load(open('docs/openapi.yaml'))"
       - name: Alert rules + unit tests (promtool)
