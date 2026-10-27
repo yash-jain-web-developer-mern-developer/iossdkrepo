@@ -41,3 +41,53 @@ jobs:
           xcodegen > ../xcodegen.log 2>&1 || { annotate "xcodegen failed" ../xcodegen.log; exit 1; }
           xcodebuild build -project MobiAdDemo.xcodeproj -scheme MobiAdDemo -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO > ../app-build.log 2>&1 || { annotate "demo app build failed" ../app-build.log; exit 1; }
           tail -n 3 ../app-build.log
+
+  simulator:
+    # Runs the SwiftUI demo app in an iOS simulator against a live MobiAd server: banner, native, and a rewarded video that really plays.
+    # Screenshots, the app log and the server-side counts are published to the ios-sim-results branch (readable without logging in).
+    runs-on: macos-15
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Run the demo app in the simulator
+        run: |
+          mkdir -p results
+          finish() { rc=$?; if [ $rc -ne 0 ]; then echo "::error title=simulator run failed::$( (grep -E 'error:|FAIL|Error' sim.log | sed 's#/Users/runner/work/[^/]*/[^/]*/##' | sort -u | head -30; tail -n 12 sim.log) 2>/dev/null | awk '{printf "%s%%0A", $0}')"; fi; cp sim.log server.log results/ 2>/dev/null; exit $rc; }
+          trap finish EXIT
+          exec > >(tee sim.log) 2>&1
+          SMOKE_HOST=127.0.0.1 SMOKE_REAL_VIDEO=1 SMOKE_STATE=smoke-state.json node scripts/sdk-smoke-server.mjs 8190 > server.log 2>&1 &
+          for _ in $(seq 1 40); do grep -q READY server.log && break; sleep 1; done
+          APP=$(grep READY server.log | awk '{print $3}'); echo "app id: $APP"
+          brew install xcodegen
+          (cd ios-demo-app && xcodegen)
+          UDID=$(xcrun simctl list devices available | grep -m1 "iPhone" | grep -oE "[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}"); echo "simulator: $UDID"
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
+          xcodebuild build -project ios-demo-app/MobiAdDemo.xcodeproj -scheme MobiAdDemo -destination "id=$UDID" -derivedDataPath build CODE_SIGNING_ALLOWED=NO
+          APPPATH=$(find build -name MobiAdDemo.app -path "*iphonesimulator*" | head -1); echo "app: $APPPATH"
+          xcrun simctl install "$UDID" "$APPPATH"
+          export SIMCTL_CHILD_MOBIAD_AUTOCONNECT=1 SIMCTL_CHILD_MOBIAD_SERVER=http://127.0.0.1:8190 SIMCTL_CHILD_MOBIAD_APP="$APP"
+          xcrun simctl launch "$UDID" io.mobiad.demo
+          sleep 20; xcrun simctl io "$UDID" screenshot results/01-banner-and-native.png
+          xcrun simctl terminate "$UDID" io.mobiad.demo
+          SIMCTL_CHILD_MOBIAD_AUTOPLAY=rewarded xcrun simctl launch "$UDID" io.mobiad.demo
+          sleep 11; xcrun simctl io "$UDID" screenshot results/02-rewarded-video-playing.png
+          sleep 12; xcrun simctl io "$UDID" screenshot results/03-rewarded-video-finished.png
+          node -e "
+            const s = JSON.parse(require('fs').readFileSync('smoke-state.json', 'utf8'));
+            fetch(s.base + '/api/report', { headers: { authorization: 'Bearer ' + s.adv } }).then((r) => r.json()).then((j) => {
+              const t = j.total; const line = 'SERVER SAW FROM THE IOS APP: impressions ' + t.impressions + ', clicks ' + t.clicks + ', viewable ' + t.viewables + ', video completes ' + t.videoCompletes;
+              console.log(line); require('fs').writeFileSync('results/server-report.txt', line + '\n' + JSON.stringify(t, null, 1));
+            });"
+      - name: Publish screenshots and results
+        if: always()
+        run: |
+          git config user.name github-actions; git config user.email actions@users.noreply.github.com
+          mkdir -p /tmp/r && cp -r results/* /tmp/r/ 2>/dev/null || true
+          git checkout --orphan ios-sim-results && git rm -rf . -q
+          cp -r /tmp/r/* . 2>/dev/null || echo "no results" > README.txt
+          git add -A && git commit -q -m "iOS simulator run ${GITHUB_SHA::7}" && git push -f origin ios-sim-results

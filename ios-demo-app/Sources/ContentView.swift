@@ -36,6 +36,14 @@ import MobiAd
     }
     func playLevel() async { level += 1; plays += 1; note("level cleared"); if plays % 2 == 0 { interstitial = await request("interstitial") } }
     func freeCoins() async { rewarded = await request("rewarded") }
+    // CI / demo helper: with MOBIAD_AUTOCONNECT=1 the app connects by itself (MOBIAD_SERVER, MOBIAD_APP) and MOBIAD_AUTOPLAY=rewarded opens the rewarded video
+    func autoStart() async {
+        let env = ProcessInfo.processInfo.environment
+        guard env["MOBIAD_AUTOCONNECT"] == "1", let s = env["MOBIAD_SERVER"], let a = env["MOBIAD_APP"] else { return }
+        server = s; appId = a
+        await connect()
+        if env["MOBIAD_AUTOPLAY"] == "rewarded" { try? await Task.sleep(nanoseconds: 3_000_000_000); await freeCoins() }
+    }
     func impression(_ ad: Ad) { Task { let ok = await ad.onShown(); note("impression " + (ok ? "reported ✓" : "failed")) } }
     func viewable(_ ad: Ad) { Task { let ok = await ad.onViewable(); note("viewable (50% for 1 s) " + (ok ? "reported ✓" : "not applicable")) } }
     func click(_ ad: Ad) { Task { let url = await ad.onClicked(); note(url == nil ? "click ignored" : "click reported ✓ → \(url!.prefix(40))"); if let u = url, let link = URL(string: u) { await UIApplication.shared.open(link) } } }
@@ -67,6 +75,7 @@ struct ContentView: View {
             VStack(spacing: 18) { AdCard(ad: box.ad, game: g, compact: false); Button("Close") { g.interstitial = nil }.buttonStyle(.bordered) }.padding()
         }
         .fullScreenCover(item: Binding(get: { g.rewarded.map(AdBox.init) }, set: { if $0 == nil { g.rewarded = nil } })) { box in RewardedView(ad: box.ad, game: g) }
+        .onAppear { Task { await g.autoStart() } }
     }
 }
 

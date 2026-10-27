@@ -9,7 +9,9 @@ const call = async (p, method = 'GET', body, token) => (await (await fetch(base 
 const su = async (email, role) => (await call('/api/signup', 'POST', { email, password: PW, role })).token;
 const adv = await su('adv@smoke.io', 'advertiser'), pub = await su('pub@smoke.io', 'publisher');
 await call('/api/campaigns', 'POST', { name: 'Smoke banner', model: 'CPC', bid: 1, budget: 100, clickUrl: 'https://example.com/landing' }, adv);
-await call('/api/campaigns', 'POST', { name: 'Smoke video', model: 'CPM', bid: 50, budget: 100, clickUrl: 'https://example.com/l', format: 'video', videoUrl: 'https://cdn.example.com/a.mp4', durationSec: 12, cta: 'Go' }, adv);
+await call('/api/campaigns', 'POST', { name: 'Smoke video', model: 'CPM', bid: 50, budget: 100, clickUrl: 'https://example.com/l', format: 'video', ...(process.env.SMOKE_REAL_VIDEO ? { videoUrl: base + '/media/sample.mp4', durationSec: 6 } : { videoUrl: 'https://cdn.example.com/a.mp4', durationSec: 12 }), cta: 'Go' }, adv);
 const a = await call('/api/apps', 'POST', { name: 'smoke' }, pub);
 await new Promise((r) => setTimeout(r, 1200));
+// SMOKE_STATE=<file>: also write the advertiser token so a CI step can read the report afterwards
+if (process.env.SMOKE_STATE) (await import('node:fs')).writeFileSync(process.env.SMOKE_STATE, JSON.stringify({ base, adv }));
 console.log(`READY http://${HOST}:${port} ${a.id}`);
