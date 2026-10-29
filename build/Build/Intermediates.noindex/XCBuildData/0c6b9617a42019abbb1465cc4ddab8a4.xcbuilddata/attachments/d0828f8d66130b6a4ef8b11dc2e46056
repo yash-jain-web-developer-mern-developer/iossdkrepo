@@ -1,0 +1,28 @@
+{
+  "" : {
+    "diagnostics" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemo-master.dia",
+    "emit-module-dependencies" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemo-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemo-master-emit-module.dia",
+    "swift-dependencies" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemo-master.swiftdeps"
+  },
+  "/Users/runner/work/iossdkrepo/iossdkrepo/ios-demo-app/Sources/ContentView.swift" : {
+    "const-values" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/ContentView.dia",
+    "index-unit-output-path" : "/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/ContentView.swiftdeps",
+    "swiftmodule" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/ContentView~partial.swiftmodule"
+  },
+  "/Users/runner/work/iossdkrepo/iossdkrepo/ios-demo-app/Sources/MobiAdDemoApp.swift" : {
+    "const-values" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemoApp.swiftconstvalues",
+    "dependencies" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemoApp.d",
+    "diagnostics" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemoApp.dia",
+    "index-unit-output-path" : "/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemoApp.o",
+    "llvm-bc" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemoApp.bc",
+    "object" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemoApp.o",
+    "swift-dependencies" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemoApp.swiftdeps",
+    "swiftmodule" : "/Users/runner/work/iossdkrepo/iossdkrepo/build/Build/Intermediates.noindex/MobiAdDemo.build/Debug-iphonesimulator/MobiAdDemo.build/Objects-normal/arm64/MobiAdDemoApp~partial.swiftmodule"
+  }
+}

@@ -1,0 +1,15 @@
+SERVER SAW FROM THE IOS APP: impressions 3, clicks 0, viewable 2, video completes 1
+{
+ "impressions": 3,
+ "clicks": 0,
+ "installs": 0,
+ "invalidClicks": 0,
+ "videoCompletes": 1,
+ "viewables": 2,
+ "conversions": 0,
+ "conversionValue": 0,
+ "spend": 0.00001,
+ "publisherRevenue": 0.000007,
+ "ctr": 0,
+ "viewability": 0.6666666666666666
+}

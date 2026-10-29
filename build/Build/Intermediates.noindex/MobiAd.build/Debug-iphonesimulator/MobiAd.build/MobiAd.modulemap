@@ -1,0 +1,4 @@
+module MobiAd {
+header "MobiAd-Swift.h"
+export *
+}

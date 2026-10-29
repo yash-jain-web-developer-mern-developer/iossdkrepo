@@ -1,0 +1,6 @@
+Target dependency graph (3 targets)
+Target 'MobiAdDemo' in project 'MobiAdDemo'
+➜ Explicit dependency on target 'MobiAd' in project 'MobiAd'
+Target 'MobiAd' in project 'MobiAd'
+➜ Explicit dependency on target 'MobiAd' in project 'MobiAd'
+Target 'MobiAd' in project 'MobiAd' (no dependencies)
