@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: Build the SDK package for iOS (UIKit viewability tracker included)
@@ -51,7 +51,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: Run the demo app in the simulator
