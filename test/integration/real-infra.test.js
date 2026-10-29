@@ -1,5 +1,6 @@
 // Opt-in: the full product flow against REAL Postgres + Redis + Kafka + SMTP (see infra/docker-compose.deps.yml).
 // Skipped unless DATABASE_URL, REDIS_URL, KAFKA_BROKERS, SMTP_URL and MAILPIT_API are all set, so `npm test` stays hermetic.
+import { readdirSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, PW, serve, human, settle, sleep } from '../lib/helpers.js';
@@ -34,7 +35,9 @@ test('real infra: concurrent migrations from many instances are safe and complet
   const repos = pools.map((p) => new Repo(p));
   await Promise.all(repos.map((r) => r.migrate())); // all four race on the advisory lock
   const v = (await repos[0].q('SELECT version FROM schema_migrations ORDER BY version')).rows.map((r) => Number(r.version));
-  assert.deepEqual(v, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  const files = readdirSync(new URL('../../infra/sql/migrations/', import.meta.url)).filter((f) => /^[0-9]+_.*[.]sql$/.test(f)).map((f) => parseInt(f, 10)).sort((x, y) => x - y);
+  assert.deepEqual(v, files); // every migration file was applied exactly once, whatever their number
+  assert.ok(files.length >= 16);
   const cols = (await repos[0].q("SELECT column_name FROM information_schema.columns WHERE table_name='users'")).rows.map((r) => r.column_name);
   for (const c of ['email_verified', 'token_version', 'totp_secret_enc', 'totp_enabled', 'recovery_hashes']) assert.ok(cols.includes(c), c);
   await Promise.all(pools.map((p) => p.end()));

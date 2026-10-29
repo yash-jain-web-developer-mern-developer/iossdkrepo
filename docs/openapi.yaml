@@ -102,7 +102,7 @@ paths:
       summary: Get your payout details and KYC/tax status (publisher)
       security: [{ bearer: [] }]
       responses:
-        '200': { description: Profile with kycStatus and taxStatus (none, submitted, verified, rejected). }
+        '200': { description: "Profile with kycStatus and taxStatus (none, submitted, verified, rejected)." }
     post:
       tags: [Billing]
       summary: Save payout details (publisher)
@@ -120,7 +120,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind], properties: { kind: { type: string, enum: [kyc, tax] } } } } } }
       responses:
         '200': { description: Submitted for admin review. }
-        '409': { description: Profile incomplete, or already submitted/verified., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: "Profile incomplete, or already submitted/verified.", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/admin/payouts.csv:
     get:
       tags: [Admin]
@@ -421,11 +421,11 @@ paths:
       security: [{ bearer: [] }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [clickId, event], properties: { clickId: { type: string }, event: { type: string, pattern: '^[a-z0-9_]{1,32}$' }, eventId: { type: string, maxLength: 128 }, value: { type: number, minimum: 0, maximum: 1000000, description: Revenue in USD. } } } } } }
       responses:
-        '200': { description: Counted (or a duplicate, flagged with duplicate=true). }
+        '200': { description: "Counted (or a duplicate, flagged with duplicate=true)." }
         '400': { description: Invalid event or value., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '401': { description: Missing, read-only or invalid API key., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: "Missing, read-only or invalid API key.", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: The click does not belong to your campaigns., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '410': { description: Unknown, forged or expired clickId (outside the attribution window)., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '410': { description: "Unknown, forged or expired clickId (outside the attribution window).", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '429': { description: Rate limited per API key., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/signup:
     post:
@@ -642,7 +642,7 @@ paths:
   /api/public-config:
     get: { tags: [Auth], summary: 'Public settings the sign-up form needs ({ inviteOnly })', responses: { '200': { description: Settings. } } }
   /api/admin/invites:
-    get: { tags: [Admin], security: [{ bearer: [] }], summary: Sign-up invites with status (open, used up, expired, revoked), responses: { '200': { description: Invites. }, '403': { description: Not an admin / MFA required. } } }
+    get: { tags: [Admin], security: [{ bearer: [] }], summary: "Sign-up invites with status (open, used up, expired, revoked)", responses: { '200': { description: Invites. }, '403': { description: Not an admin / MFA required. } } }
     post:
       tags: [Admin]
       security: [{ bearer: [] }]
@@ -661,7 +661,7 @@ paths:
       security: [{ bearer: [] }]
       summary: Pay an approved payout as a Stripe transfer, exactly once (idempotency key payout-<id>). approve=true approves a requested payout first, under the same KYC/tax rules.
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string }, approve: { type: boolean } } } } } }
-      responses: { '200': { description: Paid; reference is the Stripe transfer id. }, '404': { description: Unknown payout. }, '409': { description: not_approved, verification_missing or payout account not ready. }, '501': { description: Payouts are manual in this deployment. }, '502': { description: Stripe refused; the payout stays approved and can be retried. } }
+      responses: { '200': { description: Paid; reference is the Stripe transfer id. }, '404': { description: Unknown payout. }, '409': { description: "not_approved, verification_missing or payout account not ready." }, '501': { description: Payouts are manual in this deployment. }, '502': { description: Stripe refused; the payout stays approved and can be retried. } }
   /api/webhooks/stripe:
     post:
       tags: [Billing]
@@ -760,7 +760,7 @@ components:
         osVersion: { type: string, example: '17.2' }
         connection: { type: string, enum: [wifi, cellular] }
         userId: { type: string, maxLength: 128, description: Your own user id; sent back in the signed reward callback for rewarded ads. }
-        test: { type: boolean, description: Test mode - a canned ad with no auction, billing or tracking. }
+        test: { type: boolean, description: "Test mode - a canned ad with no auction, billing or tracking." }
         country: { type: string, example: US }
         deviceId: { type: string, maxLength: 128, description: Optional. Ignored unless consent and the app's settings allow it. Never stored raw. }
         consent: { $ref: '#/components/schemas/Consent' }
