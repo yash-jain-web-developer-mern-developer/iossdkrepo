@@ -31,7 +31,7 @@ await new Promise((r) => dsp.listen(0, '127.0.0.1', r));
 const lanRank = (a) => (/^192\.168\.65\./.test(a) ? 9 : /^192\.168\./.test(a) ? 0 : /^10\./.test(a) ? 1 : /^172\.(1[6-9]|2\d|3[01])\./.test(a) ? 2 : 5);
 const LAN_IPS = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.')).map((i) => i.address).sort((a, b) => lanRank(a) - lanRank(b));
 const PUBLIC = process.env.DEMO_PUBLIC_URL || (LAN_IPS[0] ? `http://${LAN_IPS[0]}:${PORT}` : BASE);
-const app = await createApp({ port: PORT, publicUrl: PUBLIC, trustProxyHops: 1, allowPrivateCallbacks: true, autoApproveCampaigns: true, requireFunding: false, minPayoutUsd: 1, rateLimit: 1_000_000, demoMode: true, requireEmailVerification: false, inviteOnly: true,
+const app = await createApp({ port: PORT, publicUrl: PUBLIC, trustProxyHops: 1, allowPrivateCallbacks: true, autoApproveCampaigns: true, requireFunding: false, minPayoutUsd: 1, rateLimit: 1_000_000, demoMode: true, requireEmailVerification: false, inviteOnly: /^(1|true)$/i.test(process.env.INVITE_ONLY || ''), // off by default: anyone can sign up in the demo; set INVITE_ONLY=true to require invite codes
   // tax invoices on, with a clearly fictional seller and example rates (never real tax advice)
   taxMode: 'inclusive', taxLabel: 'VAT', taxRates: { GB: 20, IN: 18, DEFAULT: 0 }, taxReverseCharge: true,
   taxSeller: { name: 'MobiAd Demo Ltd (fictional)', address: '1 Example Street, London, UK', country: 'GB', taxId: 'GB000000000 (demo)' } });

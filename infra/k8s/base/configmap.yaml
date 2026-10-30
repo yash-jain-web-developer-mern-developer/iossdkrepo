@@ -10,7 +10,7 @@ data:
   PUBLIC_URL: https://ads.example.com
   TRUST_PROXY_HOPS: "1"              # number of reverse proxies in front (ingress controller = 1)
   PAYMENTS_MODE: none                # none | stripe  (test is refused in production)
-  INVITE_ONLY: "true"                # private beta: sign-up needs an admin-issued invite code (default in production)
+  INVITE_ONLY: "false"               # "true" = private beta: sign-up needs an admin-issued invite code
   PAYOUTS_MODE: manual               # manual | stripe_connect (Stripe pays publishers; needs STRIPE_SECRET_KEY and Connect enabled)
   AUTO_PAYOUT_MAX_USD: "0"           # stripe_connect: payouts up to this amount are sent automatically (0 = admin sends every payout)
   PAYOUT_HOLD_DAYS: "7"              # earnings of the last N days are not payable yet (chargebacks arrive first)
