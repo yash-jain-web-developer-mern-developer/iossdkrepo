@@ -4,12 +4,14 @@ A mobile advertising platform: **advertisers** fund and run campaigns, **publish
 
 > **Status: private-beta ready; not ready for an unrestricted public launch.** The remaining blockers are mostly people and external systems (penetration test, lawyer review, live payment-processor test, KYC/tax for payouts, a managed production environment). See **[docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md)** for the exact, evidence-backed list.
 
+> **Developer setting this up? Start with [docs/HANDOVER.md](docs/HANDOVER.md).** The current verified status is in [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md); some older sections below (test counts, the "Not built" list) predate refunds, chargebacks, tax invoices, Stripe Connect payouts, viewability, video, invite-only sign-up and iOS, which are now built.
+
 ## Quick start (development)
 ```bash
 npm install
 npm start                    # http://localhost:8080  (site /, dashboard /app) — in-memory database, test-mode payments
 node scripts/demo-seed.js    # optional demo accounts + traffic
-npm test                     # 151 tests (146 run hermetically, 5 need real infra) (in-memory Postgres/Redis stand-ins)
+npm test                     # about 180 tests, hermetic (in-memory Postgres/Redis stand-ins); more need real infra
 ```
 Real infrastructure for integration tests: `docker compose -f infra/docker-compose.deps.yml up -d`, then see the header of `test/integration/real-infra.test.js`.
 
