@@ -16,7 +16,7 @@
   "dependencies": {
     "ioredis": "^5.11.1",
     "kafkajs": "^2.2.4",
-    "nodemailer": "^10.1.7",
+    "nodemailer": "^10.2.1",
     "pg": "^8.23.1"
   },
   "devDependencies": {
