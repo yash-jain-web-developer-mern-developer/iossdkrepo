@@ -47,7 +47,7 @@ export function loadConfig(env = process.env) {
     sellerId: env.SELLER_ID || '', sellerDomain: env.SELLER_DOMAIN || '', sellerContact: env.SELLER_CONTACT || '',
     webhookIntervalMs: +env.WEBHOOK_INTERVAL_MS || 2000,
     inviteOnly: bool(env.INVITE_ONLY, prod),  // sign-up needs an invite code from an admin (private beta). On by default in production.
-    demoMode: bool(env.DEMO_MODE, false),   // shows a "Demo data" badge in the dashboard; scripts/demo.mjs turns it on
+    demoMode: bool(env.DEMO_MODE, false),   // shows a "Demo data" badge in the dashboard; off by default
     tcfVendorId: Math.max(0, Math.floor(+env.TCF_VENDOR_ID || 0)),   // our IAB Global Vendor List id (0 = do not check the vendor list)
     allowPrivateCallbacks: bool(env.ALLOW_PRIVATE_CALLBACKS, false), // reward callbacks / webhooks / partner bidders to private addresses (tests and local dev only)
     fraudScanMs: +env.FRAUD_SCAN_MS || 5 * 60_000,

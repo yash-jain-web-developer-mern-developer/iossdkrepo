@@ -20,7 +20,9 @@ import { adServer } from './adserver/index.js';
 import { api } from './api/index.js';
 import { createMailer } from './auth/mailer.js';
 import { scanApps } from './fraud.js';
-import { json, setTrustedHops } from './http.js';
+import { json, setTrustedHops, hashPw } from './http.js';
+import { passwordProblem } from './api/util.js';
+import os from 'node:os';
 
 const PUBLIC = fileURLToPath(new URL('../public/', import.meta.url));
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -217,7 +219,14 @@ export async function createApp(overrides = {}) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const app = await createApp();
   const log = createLogger();
-  app.server.listen(app.cfg.port, () => log.info('listening', { port: app.cfg.port, db: app.cfg.databaseUrl ? 'postgres' : 'in-memory', redis: !!app.cfg.redisUrl, kafka: app.cfg.kafkaBrokers.length > 0 }));
+  // First start: ADMIN_EMAIL + ADMIN_PASSWORD create the admin account if it does not exist yet (an admin can never sign up through the site).
+  if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+    const email = process.env.ADMIN_EMAIL.trim().toLowerCase(), problem = passwordProblem(process.env.ADMIN_PASSWORD, email);
+    if (problem) log.error('ADMIN_PASSWORD rejected: ' + problem);
+    else if (!(await app.repo.userByEmail(email))) { const h = hashPw(process.env.ADMIN_PASSWORD); await app.repo.createUser({ id: 'usr_' + randomBytes(8).toString('hex'), email, role: 'admin', salt: h.salt, hash: h.hash, emailVerified: true }); log.info('admin created', { email }); }
+  }
+  const lan = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.')).map((i) => i.address).sort((x, y) => (/^192.168./.test(x) ? 0 : /^10./.test(x) ? 1 : 2) - (/^192.168./.test(y) ? 0 : /^10./.test(y) ? 1 : 2)); // home/office Wi-Fi first
+  app.server.listen(app.cfg.port, () => log.info('listening', { port: app.cfg.port, open: `http://localhost:${app.cfg.port}`, ...(lan.length ? { phoneOnSameWifi: `start with PUBLIC_URL=http://${lan[0]}:${app.cfg.port} and use that address in the app` } : {}), db: app.cfg.databaseUrl ? 'postgres' : 'in-memory', redis: !!app.cfg.redisUrl, kafka: app.cfg.kafkaBrokers.length > 0 }));
   const stop = async (sig) => { log.info('shutdown', { sig }); await app.close(); process.exit(0); };
   process.on('SIGTERM', () => stop('SIGTERM'));
   process.on('SIGINT', () => stop('SIGINT'));

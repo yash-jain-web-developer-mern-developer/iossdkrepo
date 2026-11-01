@@ -4,7 +4,8 @@
 | Platform | Status |
 |---|---|
 | **JavaScript / TypeScript** (web, React Native, Node 18+) | ✅ `sdk/js/mobiad-sdk.js` + `.d.ts`, 6 tests against the real server |
-| **Android (Kotlin/Java), iOS (Swift), Unity, Flutter** | ❌ **Not built.** The protocol below is everything a native SDK needs; each is roughly 200–400 lines. |
+| **Android (Kotlin), iOS (Swift)** | ✅ `sdk/android`, `sdk/ios`: see `docs/CONNECT_YOUR_APP.md` for a step-by-step connection of your own app. Built and checked on an Android emulator, a CI iOS simulator, and as an AAR |
+| **Unity, Flutter** | ❌ **Not built.** The protocol below is everything a native SDK needs; each is roughly 200–400 lines. |
 
 ## 1. Get an App ID
 Create a publisher account, verify your email, then **Add app** in the dashboard (declare if it is directed to children, and which ad categories to block). Copy the App ID.

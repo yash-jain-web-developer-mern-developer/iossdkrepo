@@ -2,20 +2,20 @@
 
 MobiAd is an ad platform: advertisers fund campaigns on a website, publishers (app developers) earn by showing ads through an SDK, an admin
 controls the money, and end users see ads inside a mobile app. It is a Node.js server (no framework, one small `npm` dependency list), a
-web app in `public/`, SDKs for JavaScript, Android (Kotlin) and iOS (Swift) in `sdk/`, and two demo apps.
+web app in `public/`, SDKs for JavaScript, Android (Kotlin) and iOS (Swift) in `sdk/`, and an example for connecting your own app. There is **no demo data and no demo app** in this project: it starts empty.
 
 **Read first:** `docs/LAUNCH_CHECKLIST.md` (what is verified and what is not) and the investor PDF `MobiAd-Investor-Story.pdf` (the whole flow with screenshots).
 
-## 1. Run it on one computer in 5 minutes (demo, fake data)
+## 1. Run it on one computer in 5 minutes (empty, nothing preloaded)
 Needs: **Node.js 20 or newer** (18 works). Nothing else.
 ```bash
 git clone https://github.com/yash-jain-web-developer-mern-developer/iossdkrepo.git
 cd iossdkrepo
 npm ci
-node scripts/demo.mjs          # Windows: double-click start-demo.cmd
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a long passphrase 123' npm start
 ```
-Open http://localhost:8080 . The terminal prints demo logins for an advertiser, a publisher and an admin, and a sample App ID.
-Data is in memory and disappears when you stop it. Check everything works: `npm test` (about 180 tests, 10 seconds, needs no Docker).
+Open http://localhost:8080 . It starts empty: sign up your own advertiser and publisher in the browser; the admin is the email and password above.
+Data is in memory and disappears when you stop it. **Connecting your own app and phone, step by step: `docs/CONNECT_YOUR_APP.md`.** Check everything works: `npm test` (about 180 tests, 10 seconds, needs no Docker).
 
 ## 2. Let testers use it with fake money (recommended next step)
 Testers need a public address, a database that keeps data, and Stripe's **test mode** (test cards only, no real money).
@@ -45,16 +45,16 @@ Testers need a public address, a database that keeps data, and Stripe's **test m
 Alternative with Docker: `docker build -t mobiad .` then run it with the variables above. `infra/k8s/` has Kubernetes manifests, `docs/RUNBOOK.md` the deployment steps.
 
 ## 3. Apps for phones
-* **Android demo app:** `android-demo-app/` (open in Android Studio, or `gradle assembleDebug`). In the app, enter your **Server** address and an **App ID** created in the publisher dashboard.
+* **Your own app:** follow `docs/CONNECT_YOUR_APP.md` (USB with `adb reverse`, or Wi-Fi). A small code example is in `sdk/android/examples/MinimalIntegration.kt`.
 * **Android SDK** (library, AAR): `sdk/android/` (`gradle assembleRelease`). **JavaScript SDK:** `sdk/js/`. Integration guide: `docs/SDK_INTEGRATION.md`.
-* **iOS:** `sdk/ios/` (Swift package) and `ios-demo-app/` (generate the Xcode project with `xcodegen`). It builds and runs in a simulator on a Mac through the GitHub Actions workflow `.github/workflows/ios.yml`; it has **not** been run on a physical iPhone.
+* **iOS:** `sdk/ios/` (Swift package). It builds on a Mac and its smoke test passes against a live server in the GitHub Actions workflow `.github/workflows/ios.yml`. It was also run inside an iOS simulator with a small demo app (since removed from this project; it is in the git history); it has **not** been run on a physical iPhone.
 
 ## 4. Before real money (not needed for a fake-money trial)
 Stripe live mode test (one small real payment, refund, webhook), tax advisor review of invoices, penetration test, lawyer review of terms and privacy, managed Postgres/Redis/Kafka with backups, `NODE_ENV=production` (it refuses to start with unsafe settings), `INVITE_ONLY=true`. Details in `docs/LAUNCH_CHECKLIST.md`.
 
 ## 5. Where things are
 `src/` server (`api/` routes, `adserver/` auction and tracking, `billing/` Stripe and tax, `db/repo.js` all SQL), `public/` web app, `infra/sql/migrations/` database,
-`test/` automated tests, `docs/openapi.yaml` the API, `scripts/` demo, admin creation, checks. GitHub Actions in `.github/workflows/` run tests, security scans, the OpenAPI lint, integration tests with real Postgres/Redis/Kafka/mail, and the iOS build and simulator run.
+`test/` automated tests, `docs/openapi.yaml` the API, `scripts/` admin creation, connection self-check, SDK smoke-test server. GitHub Actions in `.github/workflows/` run tests, security scans, the OpenAPI lint, integration tests with real Postgres/Redis/Kafka/mail, and the iOS build and simulator run.
 
 ## 6. Secrets
 Never put keys in files or chat. Stripe keys, `MOBIAD_SECRET`, database passwords and webhook secrets go into the host's environment settings only. If a key was ever shared, roll it in the Stripe dashboard.

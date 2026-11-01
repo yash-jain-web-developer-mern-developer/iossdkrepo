@@ -10,8 +10,8 @@ const hit = async (url, init = {}) => { const ctl = new AbortController(); const
 console.log(`MobiAd self-check\n  server: ${base}\n  app:    ${appId}\n`);
 
 console.log('1. Can this machine reach the server?');
-try { const r = await hit(base + '/healthz'); if (r.ok) ok('server answered /healthz'); else bad('server answered with HTTP ' + r.status, 'make sure the demo is running (start-demo.cmd) and the address is right'); }
-catch (e) { bad('no answer from ' + base + ' (' + (e.name === 'AbortError' ? 'timed out' : e.message) + ')', 'use the phone address printed by the demo (not localhost); phone and computer must be on the same Wi-Fi; when Windows asks, allow Node.js through the firewall'); }
+try { const r = await hit(base + '/healthz'); if (r.ok) ok('server answered /healthz'); else bad('server answered with HTTP ' + r.status, 'make sure the server is running (start-demo.cmd) and the address is right'); }
+catch (e) { bad('no answer from ' + base + ' (' + (e.name === 'AbortError' ? 'timed out' : e.message) + ')', 'use the phone address the server prints at start (phoneOnSameWifi) (not localhost); phone and computer must be on the same Wi-Fi; when Windows asks, allow Node.js through the firewall'); }
 if (failed) { console.log('\nStopped: fix step 1 first.'); process.exit(1); }
 
 console.log('\n2. Test ad (never billed, proves the App ID and the wiring)');
