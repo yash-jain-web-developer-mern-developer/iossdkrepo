@@ -1,9 +1,9 @@
-FROM node:22-alpine AS deps
+FROM node:25-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM node:22-alpine
+FROM node:25-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 # The runtime needs only `node`. Removing npm/npx/corepack drops their bundled dependencies (a recurring source of
